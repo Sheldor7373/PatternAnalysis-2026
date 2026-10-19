@@ -29,6 +29,7 @@ JSON serialisation rejects nonfinite values. Input files are never rewritten.
 
 Score envelope:
 {
+  "score_receipt_version": "input-bindings-v1",
   "data_kind": "synthetic_test_scores" OR "saved_model_scores",
   "protocol_sha256": digest(parsed_manifest),
   "preflight_sha256": digest(parsed_complete_PASS_preflight),
@@ -58,6 +59,33 @@ score = {
   "target_mask_sha256": matching preflight candidate target_mask_sha256
 }
 An optional margin must exactly equal positive sum minus negative sum.
+Every baseline/patch row additionally requires checkpoint_id and basis_id
+matching its model's envelope identities. Baseline basis_id identifies the
+comparison context, with basis_applied=false; substantive baseline basis_id
+must be null. Patches require basis_applied=true and the evaluated basis_id.
+Rows require recipient_input, and donor_input (null for baselines; a complete
+donor receipt for all patches, including self patches). Each input receipt has:
+source_id; input_ids; attention_mask; eligible_mask; token_span;
+forward_input_sha256; mapping_policy_version; raw_offsets_sha256;
+span_mapping_sha256; bound_input_sha256. The last is digest of all preceding
+receipt fields. Arrays are flat, representing the actual single-example row.
+The producer MUST capture these arrays/masks/span from the inputs actually
+supplied to scoring, not stamp a preflight expectation onto an unrelated score.
+expected_source_input_receipt is a validation/test helper, not proof of model
+execution. The summariser compares the entire declared actual input against
+the expected recipient/donor for the manifest case. Canonical JSON comparisons
+distinguish Boolean masks from1 and integer IDs from floats. Missing bindings,
+absent/present payload mixing and checkpoint/basis substitutions are rejected.
+
+Real saved_model_scores require offline cached T5TokenizerFast provenance at
+the pinned revision, all five exact tokenizer/config asset hashes AND byte
+counts in negation_receipts.PINNED_ASSETS, real special IDs, and explicit
+local_files_only/use_fast/trust_remote_code load-option declarations. A
+synthetic PASS cannot support real-score ingestion. synthetic_test_scores
+instead require the explicitly synthetic tokenizer-fixture provenance; the
+two modes cannot silently substitute for one another. These receipts check
+consistency with known local assets, not remote provenance or the authenticity
+of model execution/log probabilities. No real-score producer is implemented.
 The existing adapter's score dictionary needs these two hash fields attached
 from its exact input receipt; this module does not generate those scores.
 Counts derive from masks, not comparison with pad ID. The preflight artifact

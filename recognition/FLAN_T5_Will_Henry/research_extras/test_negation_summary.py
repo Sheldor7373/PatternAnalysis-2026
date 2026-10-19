@@ -12,6 +12,7 @@ import unittest
 from negation_preflight import MODELS, digest, preflight
 from negation_summary import AGGREGATION, main, prefit_gate, select_snapshots, summarise
 from test_negation_preflight import FixtureTokenizer, fixture_manifest
+from negation_receipts import SCORE_RECEIPT_VERSION, expected_source_input_receipt
 
 
 def synthetic_scores(manifest, receipt, stage="pilot", condition=None, step=32):
@@ -24,7 +25,8 @@ def synthetic_scores(manifest, receipt, stage="pilot", condition=None, step=32):
     else:
         ids = {r["id"] for r in sources.values() if r["split"] == stage and "recipient" in r["roles"]}
     condition = condition or {"pilot": "coordinate_e0", "substantive": "none"}.get(stage, "learned_true")
-    data = {"data_kind": "synthetic_test_scores", "protocol_sha256": digest(manifest), "preflight_sha256": digest(receipt),
+    data = {"data_kind": "synthetic_test_scores", "score_receipt_version": SCORE_RECEIPT_VERSION,
+            "protocol_sha256": digest(manifest), "preflight_sha256": digest(receipt),
             "stage": stage, "basis_condition": condition,
             "checkpoint_ids": {model: str(i + 1) * 64 for i, model in enumerate(MODELS)},
             "basis_ids": {model: str(i + 3) * 64 for i, model in enumerate(MODELS)},
@@ -33,6 +35,12 @@ def synthetic_scores(manifest, receipt, stage="pilot", condition=None, step=32):
         candidates = records[source_id]["candidates"]
         values = (0, -margin) if margin >= 0 else (margin, 0)
         result = {"model": model, "source_id" if case_id is None else "case_id": source_id if case_id is None else case_id}
+        donor_id = (source_id if case_id and case_id.startswith("self:") else
+                    next(c["donor_id"] for c in manifest["intervention_cases"] if c["id"] == case_id) if case_id else None)
+        result.update(recipient_input=expected_source_input_receipt(source_id, records[source_id]),
+                      donor_input=expected_source_input_receipt(donor_id, records[donor_id]) if donor_id is not None else None,
+                      checkpoint_id=data["checkpoint_ids"][model], basis_id=data["basis_ids"][model] if stage != "substantive" else None,
+                      basis_applied=case_id is not None)
         for name, value in zip(("positive", "negative"), values):
             result[name] = {"summed_logprob": value, "aggregation": AGGREGATION, "eos_included": True,
                             **{field: candidates[name][field] for field in ("token_count", "token_ids_sha256", "target_mask_sha256")}}
@@ -230,6 +238,8 @@ class SummaryTests(unittest.TestCase):
         a = self.run_summary(synthetic_scores(self.manifest, self.receipt, "selection", step=32))
         data64 = synthetic_scores(self.manifest, self.receipt, "selection", step=64)
         data64["basis_ids"] = {model: "e" * 64 for model in MODELS}
+        for row in data64["baselines"] + data64["patches"]:
+            row["basis_id"] = data64["basis_ids"][row["model"]]
         for row in data64["patches"]:
             if not row["case_id"].startswith("self:") and row["case_id"].endswith("/present"):
                 change_margin(row, 4 if row["model"] == "lora_merged_copy" else 3 + 5e-7)

@@ -210,6 +210,9 @@ def load_cached_tokenizer(directory, revision):
     if tokenizer.eos_token_id != config["eos_token_id"] or tokenizer.pad_token_id != config["pad_token_id"]:
         raise ValueError("Tokenizer special IDs differ from cached configuration metadata")
     return tokenizer, {"kind": "offline cached tokenizer", "path": str(directory), "revision": revision,
+                       "class": type(tokenizer).__module__ + "." + type(tokenizer).__name__, "is_fast": tokenizer.is_fast,
+                       "eos_token_id": tokenizer.eos_token_id, "pad_token_id": tokenizer.pad_token_id,
+                       "load_options": {"local_files_only": True, "use_fast": True, "trust_remote_code": False},
                        "files": files, "verification": "Local revision-labelled directory and file hashes; no remote lookup or weight-file read"}
 
 

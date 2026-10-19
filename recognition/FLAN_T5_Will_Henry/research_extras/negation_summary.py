@@ -14,6 +14,7 @@ import re
 
 from negation_preflight import MODELS, digest, token_record, validate_contract
 from negation_mapping import POLICY_VERSION, map_source_span
+from negation_receipts import SCORE_RECEIPT_VERSION, validate_row_binding, validate_tokenizer_provenance
 
 AGGREGATION = "sum; padding excluded; no length normalisation"
 CONDITIONS = {"learned_true", "permuted_3720", "random_3711", "random_3712", "random_3713"}
@@ -178,6 +179,8 @@ def summarise(manifest, preflight, data):
     records = validate_preflight(manifest, preflight)
     require(data["protocol_sha256"] == digest(manifest) and data["preflight_sha256"] == digest(preflight), "Saved score provenance hash mismatch")
     require(data["data_kind"] in {"synthetic_test_scores", "saved_model_scores"}, "Declare score provenance kind")
+    require(data.get("score_receipt_version") == SCORE_RECEIPT_VERSION, "Require versioned actual-input score bindings")
+    validate_tokenizer_provenance(preflight, data["data_kind"])
     stage, condition = data["stage"], data["basis_condition"]
     require(set(data["checkpoint_ids"]) == set(MODELS), "Require both fixed checkpoints")
     for identity in data["checkpoint_ids"].values():
@@ -204,14 +207,22 @@ def summarise(manifest, preflight, data):
         sha(lock["selection_summary_sha256"])
     baseline_rows = indexed(data["baselines"], lambda r: (r["model"], r["source_id"]),
                             {(model, identity) for model in MODELS for identity in recipient_ids})
+    for (model, source_id), row in baseline_rows.items():
+        validate_row_binding(row, source_id, None, records, data["checkpoint_ids"][model],
+                             data["basis_ids"][model] if stage != "substantive" else None)
     baseline = {key: score_margin(row, records[key[1]]["candidates"]) for key, row in baseline_rows.items()}
     active_cases = {} if stage == "substantive" else {identity: c for identity, c in cases.items() if c["recipient_id"] in recipient_ids}
     self_cases = {} if stage == "substantive" else {"self:" + identity: {"recipient_id": identity, "donor_id": identity} for identity in recipient_ids}
     all_cases = {**active_cases, **self_cases}
     patches = indexed(data["patches"], lambda r: (r["model"], r["case_id"]),
                       {(model, identity) for model in MODELS for identity in all_cases})
+    for (model, case_id), row in patches.items():
+        case = all_cases[case_id]
+        validate_row_binding(row, case["recipient_id"], case["donor_id"], records,
+                             data["checkpoint_ids"][model], data["basis_ids"][model])
     patched_margins = {key: score_margin(row, records[all_cases[key[1]]["recipient_id"]]["candidates"]) for key, row in patches.items()}
-    report = {"schema_version": 1, "data_kind": data["data_kind"], "stage": stage, "basis_condition": condition,
+    report = {"schema_version": 1, "score_receipt_version": SCORE_RECEIPT_VERSION,
+              "data_kind": data["data_kind"], "stage": stage, "basis_condition": condition,
               "protocol_sha256": digest(manifest), "preflight_sha256": digest(preflight), "scores_sha256": digest(data),
               "checkpoint_ids": data["checkpoint_ids"], "basis_ids": data.get("basis_ids"), "snapshot_step": data.get("snapshot_step"),
               "selection_lock": data.get("selection_lock"), "models": {}, "fitting_authorised": False,

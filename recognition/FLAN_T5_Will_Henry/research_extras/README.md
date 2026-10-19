@@ -219,6 +219,12 @@ It requires a complete PASS preflight and exact case coverage; no model or
 tokenizer executes. Read [negation_summary_contract.txt](negation_summary_contract.txt)
 for the score/measurement receipt schema, selection tie rule and limitations.
 Missing mechanical evidence is `UNAVAILABLE`; fitting remains unauthorised.
+Score receipt version `input-bindings-v1` binds every declared actual recipient
+input and patch donor input (IDs, explicit masks, eligibility and span) to the
+preflight, plus checkpoint/basis to the envelope. Real scores require the pinned
+real tokenizer asset/class/options receipt; synthetic PASS fixtures cannot be
+promoted to real evidence. See `negation_receipts.py` and its adversarial tests.
+Receipt consistency does not authenticate model execution or log probabilities.
 
 The original strict-policy offline preflight against the pinned tokenizer stopped on
 `fit/negation-01/effusion/absent` with `span_boundary` for prompt-offset
