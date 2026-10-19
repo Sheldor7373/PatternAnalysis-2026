@@ -14,6 +14,8 @@ from transformers import AutoTokenizer, DataCollatorForSeq2Seq, get_linear_sched
 from dataset import ReportDataset, read_jsonl, select_rows, write_json
 from modules import MODEL, RadiologySimplifier, choose_device, load_checkpoint
 from runtime import append_jsonl, environment, memory_stats, precision_context, reset_memory, set_seed, sha256, synchronise
+from checkpoint_storage import publish_checkpoint, resolve_checkpoint
+from training_control import selection_point, update_selection
 
 
 def evaluate_loss(model, loader, device, precision):
@@ -83,7 +85,7 @@ def main(args):
     start_epoch, start_batch, step, best, stale, elapsed_before = 0, 0, 0, math.inf, 0, 0.0
     if args.resume:
         # This state is produced locally by this script; never load an untrusted .pt file.
-        state = torch.load(output / "latest" / "trainer.pt", map_location="cpu", weights_only=False)
+        state = torch.load(resolve_checkpoint(output / "latest") / "trainer.pt", map_location="cpu", weights_only=False)
         if saved_settings.get("checkpoint_step") != state["step"]:
             raise ValueError("Checkpoint save was interrupted: model and optimizer steps differ")
         if state["train_sha"] != sha256(train_path) or state["dev_sha"] != sha256(dev_path):
@@ -102,16 +104,18 @@ def main(args):
     trained_tokens = 0
 
     def save(epoch, next_batch):
-        model.save(output / "latest", tokenizer, {**settings, "checkpoint_step": step})
         state = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
                  "epoch": epoch, "next_batch": next_batch, "step": step, "best": best, "stale": stale,
                  "elapsed_seconds": elapsed_before + time.perf_counter() - started,
                  "python_rng": random.getstate(), "torch_rng": torch.get_rng_state(),
                  "cuda_rng": torch.cuda.get_rng_state_all() if device.type == "cuda" else None,
                  "train_sha": sha256(train_path), "dev_sha": sha256(dev_path)}
-        temporary = output / "latest" / "trainer.tmp"
-        torch.save(state, temporary)
-        temporary.replace(output / "latest" / "trainer.pt")
+
+        def write(stage):
+            model.save(stage, tokenizer, {**settings, "checkpoint_step": step})
+            torch.save(state, stage / "trainer.pt")
+
+        publish_checkpoint(output / "latest", write)
 
     stopped = "epochs_complete"
     for epoch in range(start_epoch, args.epochs):
@@ -159,27 +163,28 @@ def main(args):
                 if step >= total_steps or time_up:
                     stopped = "time_budget" if time_up else "step_budget"
                     break
+        finished_epoch = batch_index + 1 == len(loader)
+        eligible = selection_point(finished_epoch, step, total_steps)
         dev_loss = evaluate_loss(model, dev_loader, device, args.precision)
         entry = {"epoch": epoch + 1, "step": step, "train_loss": epoch_sum / max(1, epoch_tokens),
-                 "dev_loss": dev_loss, "elapsed_seconds": elapsed_before + time.perf_counter() - started}
+                 "dev_loss": dev_loss, "selection_decision": eligible,
+                 "elapsed_seconds": elapsed_before + time.perf_counter() - started}
         print(json.dumps(entry), flush=True)
         append_jsonl(output / "history.jsonl", entry)
-        if dev_loss < best - args.min_delta:
-            best, stale = dev_loss, 0
-            model.save(output / "best", tokenizer, {**settings, "checkpoint_step": step})
-        else:
-            stale += 1
-        finished_epoch = batch_index + 1 == len(loader)
+        best, stale, improved = update_selection(best, stale, dev_loss, eligible, args.min_delta)
+        if improved:
+            publish_checkpoint(output / "best",
+                               lambda stage: model.save(stage, tokenizer, {**settings, "checkpoint_step": step}))
         save(epoch + 1 if finished_epoch else epoch, 0 if finished_epoch else batch_index + 1)
         start_batch = 0
-        if stale >= args.patience:
+        if eligible and stale >= args.patience:
             stopped = "early_stopping"
             break
         if stopped != "epochs_complete":
             break
     synchronise(device)
     elapsed = time.perf_counter() - started
-    result = {"optimizer_steps": step, "best_dev_loss": best, "stop_reason": stopped,
+    result = {"optimizer_steps": step, "best_dev_loss": best if math.isfinite(best) else None, "stop_reason": stopped,
               "session_seconds": elapsed, "total_elapsed_seconds": elapsed_before + elapsed,
               "session_target_tokens": trained_tokens, "target_tokens_per_second": trained_tokens / max(elapsed, 1e-9),
               **memory_stats(device), **settings}

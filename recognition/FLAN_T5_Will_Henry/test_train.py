@@ -6,10 +6,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import torch
 
 from dataset import write_jsonl
-from modules import load_checkpoint
+from modules import RadiologySimplifier, load_checkpoint
 import test_model as model_tests
 from train import main, parser
 
@@ -24,7 +25,7 @@ class TrainingTests(unittest.TestCase):
         model_tests.ModelTests.tearDownClass()
 
     def test_resume_keeps_optimizer_progress_and_final_weights(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory(dir=model_tests.ModelTests.path) as folder:
             root = Path(folder)
             data = root / "data"
             data.mkdir()
@@ -36,20 +37,34 @@ class TrainingTests(unittest.TestCase):
                       "--batch-size", "1", "--accumulate", "2", "--epochs", "2", "--max-steps", "4",
                       "--dev-limit", "2", "--cpu-threads", "1", "--precision", "fp32"]
             whole, resumed = root / "whole", root / "resumed"
+
+            def initially_pinned(*args, **kwargs):
+                model = RadiologySimplifier(*args, **kwargs)
+                model.model.config._commit_hash = "original-pinned-sha"
+                return model
+
+            def local_reload(*args, **kwargs):
+                model, tokenizer, settings = load_checkpoint(*args, **kwargs)
+                model.model.config._commit_hash = None
+                return model, tokenizer, settings
+
             with redirect_stdout(io.StringIO()):
-                main(parser().parse_args(common + ["--output", str(whole)]))
-                main(parser().parse_args(common + ["--output", str(resumed), "--max-minutes", "0.0000001"]))
+                with patch("train.RadiologySimplifier", side_effect=initially_pinned):
+                    main(parser().parse_args(common + ["--output", str(whole)]))
+                    main(parser().parse_args(common + ["--output", str(resumed), "--max-minutes", "0.0000001"]))
                 first = json.loads((resumed / "training_metrics.json").read_text())
                 self.assertEqual(first["optimizer_steps"], 1)
                 self.assertEqual(first["stop_reason"], "time_budget")
-                checkpoint_settings_path = resumed / "latest" / "experiment.json"
-                checkpoint_settings = json.loads(checkpoint_settings_path.read_text())
-                checkpoint_settings["revision"] = "original-pinned-sha"
-                checkpoint_settings_path.write_text(json.dumps(checkpoint_settings))
-                main(parser().parse_args(common + ["--output", str(resumed), "--resume"]))
+                with patch("train.load_checkpoint", side_effect=local_reload):
+                    main(parser().parse_args(common + ["--output", str(resumed), "--resume"]))
             final = json.loads((resumed / "training_metrics.json").read_text())
             self.assertEqual(final["optimizer_steps"], 4)
             self.assertEqual(final["revision"], "original-pinned-sha")
+            whole_decisions = [r["step"] for r in map(json.loads, (whole / "history.jsonl").read_text().splitlines())
+                               if r.get("selection_decision")]
+            resumed_decisions = [r["step"] for r in map(json.loads, (resumed / "history.jsonl").read_text().splitlines())
+                                 if r.get("selection_decision")]
+            self.assertEqual(whole_decisions, resumed_decisions)
             left, _, _ = load_checkpoint(whole / "latest", torch.device("cpu"))
             right, _, _ = load_checkpoint(resumed / "latest", torch.device("cpu"))
             for name, tensor in left.state_dict().items():

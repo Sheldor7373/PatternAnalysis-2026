@@ -12,13 +12,16 @@ from tokenizers.pre_tokenizers import Whitespace
 
 from dataset import ReportDataset
 from modules import RadiologySimplifier, load_checkpoint
+from checkpoint_storage import mark_complete
 
 
 class ModelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         torch.set_num_threads(1)
-        cls.temp = tempfile.TemporaryDirectory()
+        scratch = Path(__file__).parent / "runs" / "tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        cls.temp = tempfile.TemporaryDirectory(dir=scratch)
         cls.path = Path(cls.temp.name)
         base = Tokenizer(WordLevel({"<pad>": 0, "</s>": 1, "<unk>": 2,
                                     "No": 3, "effusion": 4, "Fluid": 5, "absent": 6}, unk_token="<unk>"))
@@ -62,9 +65,10 @@ class ModelTests(unittest.TestCase):
         optimizer.step()
         model.eval()
         expected = model(**batch).logits.detach()
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory(dir=self.path) as folder:
             settings = {"model": str(self.path), "revision": "main", "mode": "lora", "rank": 2}
             model.save(folder, self.tokenizer, settings)
+            mark_complete(folder)
             restored, _, _ = load_checkpoint(folder, torch.device("cpu"))
             restored.eval()
             torch.testing.assert_close(restored(**batch).logits, expected)
@@ -79,9 +83,10 @@ class ModelTests(unittest.TestCase):
         model.eval()
         batch = self.batch(model)
         expected = model(**batch).logits.detach()
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory(dir=self.path) as folder:
             model.save(folder, self.tokenizer,
                        {"model": "base-no-longer-available", "revision": "pinned-sha", "mode": "full"})
+            mark_complete(folder)
             original_load = AutoModelForSeq2SeqLM.from_pretrained
 
             def checkpoint_only(path, *args, **kwargs):

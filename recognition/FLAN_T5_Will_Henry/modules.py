@@ -5,6 +5,7 @@ import json
 import torch
 from torch import nn
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from checkpoint_storage import resolve_checkpoint
 
 MODEL = "google/flan-t5-small"
 
@@ -46,7 +47,7 @@ class RadiologySimplifier(nn.Module):
 
 
 def load_checkpoint(path, device):
-    path = Path(path)
+    path = resolve_checkpoint(path)
     settings = json.loads((path / "experiment.json").read_text(encoding="utf-8"))
     model = RadiologySimplifier(settings["model"], settings["revision"], settings["mode"],
                                settings.get("rank", 8), checkpoint=path).to(device)
