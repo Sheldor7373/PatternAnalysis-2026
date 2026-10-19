@@ -228,9 +228,10 @@ def align_predictions(predictions):
             other = aligned[mode][row_id]
             if any(row.get(key) != other.get(key) for key in ("input", "target", "image", "source")):
                 raise ValueError(f"Source/reference/exposure differs for {row_id}")
-            if (row.get("visible_input") is not None and other.get("visible_input") is not None
-                    and row["visible_input"] != other["visible_input"]):
-                raise ValueError(f"Recorded model-visible source differs for {row_id}")
+        visible = [aligned[mode][row_id]["visible_input"] for mode in modes
+                   if aligned[mode][row_id].get("visible_input") is not None]
+        if visible and any(value != visible[0] for value in visible[1:]):
+            raise ValueError(f"Recorded model-visible source differs for {row_id}")
     return aligned
 
 
@@ -276,19 +277,26 @@ def bootstrap_differences(scores, groups, draws=1000, seed=3710):
                              for a, b, metric in columns] for i in range(len(covered))])
     sums = np.array([differences[group].sum(axis=0) for group in groups])
     sizes = np.array([len(group) for group in groups])
-    rng = np.random.default_rng(seed)
-    estimates = []
-    for _ in range(draws):
-        counts = np.bincount(rng.integers(len(groups), size=len(groups)), minlength=len(groups))
-        estimates.append((counts @ sums) / (counts @ sizes))
-    low, high = np.quantile(estimates, [0.025, 0.975], axis=0)
+    available = len(groups) >= 2
+    if available:
+        rng = np.random.default_rng(seed)
+        estimates = []
+        for _ in range(draws):
+            counts = np.bincount(rng.integers(len(groups), size=len(groups)), minlength=len(groups))
+            estimates.append((counts @ sums) / (counts @ sizes))
+        low, high = np.quantile(estimates, [0.025, 0.975], axis=0)
+    else:
+        low = high = [None] * len(columns)
     means = differences.mean(axis=0)
     return {"method": "paired report/image-component percentile bootstrap, row-weighted means",
             "uncertainty": "Evaluation-sample uncertainty only; not training/random-seed uncertainty",
-            "seed": seed, "draws": draws, "groups": len(groups), "rows": len(covered),
+            "seed": seed, "draws": draws if available else 0, "requested_draws": draws,
+            "groups": len(groups), "rows": len(covered), "uncertainty_available": available,
+            "uncertainty_unavailable_reason": None if available else "Fewer than two observable report/image components",
             "limitation": "Components are observable report/image clusters, not verified independent patients.",
             "intervals": [{"difference": f"{b} minus {a}", "metric": key, "mean": float(means[i]),
-                           "lower_95": float(low[i]), "upper_95": float(high[i])}
+                           "lower_95": float(low[i]) if available else None,
+                           "upper_95": float(high[i]) if available else None}
                           for i, (a, b, key) in enumerate(columns)]}
 
 

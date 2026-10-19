@@ -22,6 +22,29 @@ def metric(mode="frozen"):
 
 
 class DiagnosticsTests(unittest.TestCase):
+    def test_one_component_retains_mean_without_an_uncertainty_interval(self):
+        scores = {"frozen": [{key: 0.0 for key in ROUGE} for _ in range(3)],
+                  "lora": [{key: value for key in ROUGE} for value in (0.1, 0.1, 0.7)]}
+        result = bootstrap_differences(scores, [[0, 1, 2]], draws=100, seed=3710)
+        self.assertFalse(result["uncertainty_available"])
+        self.assertEqual(result["draws"], 0)
+        for interval in result["intervals"]:
+            self.assertAlmostEqual(interval["mean"], 0.3)
+            self.assertIsNone(interval["lower_95"])
+            self.assertIsNone(interval["upper_95"])
+
+    def test_visible_alignment_compares_nonnull_values_when_first_mode_is_missing(self):
+        row = {"id": "r1", "input": "source", "target": "reference", "prediction": "output"}
+        predictions = {"frozen": [dict(row)], "full": [{**row, "visible_input": "FIRST"}],
+                       "lora": [{**row, "visible_input": "DIFFERENT"}]}
+        with self.assertRaisesRegex(ValueError, "model-visible source differs"):
+            align_predictions(predictions)
+        predictions["lora"][0]["visible_input"] = "FIRST"
+        self.assertEqual(len(align_predictions(predictions)), 3)
+        predictions["frozen"][0]["visible_input"] = ""
+        with self.assertRaisesRegex(ValueError, "model-visible source differs"):
+            align_predictions(predictions)
+
     def setUp(self):
         scratch = Path(__file__).parent / "runs" / "tests"
         scratch.mkdir(parents=True, exist_ok=True)
