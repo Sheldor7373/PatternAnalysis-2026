@@ -2,16 +2,18 @@
 
 import argparse
 from datetime import datetime, timezone
+from functools import partial
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import random
+import shutil
 import time
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 from transformers import AutoTokenizer, DataCollatorForSeq2Seq, get_linear_schedule_with_warmup
 
 from dataset import ReportDataset, read_jsonl, select_rows, write_json
@@ -19,6 +21,7 @@ from modules import MODEL, RadiologySimplifier, choose_device, load_checkpoint
 from runtime import append_jsonl, environment, memory_stats, precision_context, reset_memory, set_seed, sha256, synchronise
 from checkpoint_storage import publish_checkpoint, resolve_checkpoint
 from training_control import selection_point, update_selection, validate_best_reference
+from training_transition import RemainingBatches, checkpoint_cursor, transition_policy, lr_factor, validate_arguments
 
 
 def atomic_status(output, value):
@@ -60,19 +63,32 @@ def main(args):
     train_path, dev_path = Path(args.data) / "train.jsonl", Path(args.data) / "dev.jsonl"
     train_rows = select_rows(read_jsonl(train_path), args.train_limit, args.seed)
     dev_rows = select_rows(read_jsonl(dev_path), args.dev_limit, args.seed)
-    if args.resume:
-        model, tokenizer, saved_settings = load_checkpoint(output / "latest", device)
+    restoring = args.resume or args.transition_from is not None
+    if args.resume and args.transition_from is not None:
+        # The recorded parent path is a provenance argument on later resumes;
+        # the checkpoint loaded here is always this segment's own latest.
+        source_checkpoint = resolve_checkpoint(output / "latest")
+    elif args.transition_from is not None:
+        if not Path(args.transition_from).is_dir():
+            raise ValueError("transition-from must name an immutable checkpoint directory")
+        source_checkpoint = resolve_checkpoint(args.transition_from)
+        if source_checkpoint.is_relative_to(output.resolve()):
+            raise ValueError("Transition source must be outside the new output directory")
+    elif args.resume:
+        source_checkpoint = resolve_checkpoint(output / "latest")
+    if restoring:
+        model, tokenizer, saved_settings = load_checkpoint(source_checkpoint, device)
         original = saved_settings["arguments"]
-        excluded = {"resume", "device", "max_minutes", "cpu_threads"}
-        defaults = {"checkpoint_minutes": 0.0, "eval_minutes": 0.0, "eval_at_start": False}
-        changed = [key for key, value in vars(args).items()
-                   if key not in excluded and original.get(key, defaults.get(key)) != value]
-        if changed:
-            raise ValueError(f"Resume configuration changed: {changed}")
+        validate_arguments(vars(args), original, transition=not args.resume)
+        state = torch.load(source_checkpoint / "trainer.pt", map_location="cpu", weights_only=False)
+        if saved_settings.get("checkpoint_step") != state["step"]:
+            raise ValueError("Checkpoint save was interrupted: model and optimizer steps differ")
+        if state["train_sha"] != sha256(train_path) or state["dev_sha"] != sha256(dev_path):
+            raise ValueError("Prepared data changed since checkpoint")
     else:
         tokenizer = AutoTokenizer.from_pretrained(args.model, revision=args.revision)
         model = RadiologySimplifier(args.model, args.revision, args.mode, args.rank).to(device)
-    revision = saved_settings["revision"] if args.resume else (model.model.config._commit_hash or args.revision)
+    revision = saved_settings["revision"] if restoring else (model.model.config._commit_hash or args.revision)
     if args.gradient_checkpointing:
         model.model.gradient_checkpointing_enable()
         model.model.enable_input_require_grads()
@@ -80,7 +96,8 @@ def main(args):
     collator = DataCollatorForSeq2Seq(tokenizer, model=model.model, label_pad_token_id=-100)
     training = ReportDataset(train_rows, tokenizer, args.source_length, args.target_length)
     development = ReportDataset(dev_rows, tokenizer, args.source_length, args.target_length)
-    dev_loader = DataLoader(development, batch_size=args.batch_size, collate_fn=collator,
+    dev_batch_size = saved_settings.get("dev_batch_size", original["batch_size"]) if restoring else args.batch_size
+    dev_loader = DataLoader(development, batch_size=dev_batch_size, collate_fn=collator,
                             generator=torch.Generator().manual_seed(args.seed))
     steps_per_epoch = math.ceil(math.ceil(len(training) / args.batch_size) / args.accumulate)
     total_steps = steps_per_epoch * args.epochs
@@ -88,39 +105,69 @@ def main(args):
         total_steps = min(total_steps, args.max_steps)
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr,
                                  weight_decay=args.weight_decay)
-    scheduler = get_linear_schedule_with_warmup(optimizer, int(total_steps * 0.05), total_steps)
+    policy = state.get("scheduler_policy") if restoring else None
+    transition = saved_settings.get("transition") if restoring else None
+    if restoring and not args.resume:
+        policy = transition_policy(state, original, vars(args), len(training))
+        transition = {"source_checkpoint": str(source_checkpoint.resolve()),
+                      "source_completion_sha256": sha256(source_checkpoint / "COMPLETE.json"),
+                      "source_trainer_sha256": sha256(source_checkpoint / "trainer.pt"),
+                      "source_step": state["step"], "source_arguments": original,
+                      "source_next_batch": state["next_batch"],
+                      "cursor": {"epoch": policy["anchor_epoch"], "next_sample": policy["anchor_offset"],
+                                 "consumed_examples": policy["anchor_examples"]},
+                      "previous_monitor": state.get("monitor", {}),
+                      "selection_note": "Mixed-batch continuation; same fixed dev rows and epoch-end selection policy"}
+    if policy:
+        total_steps = policy["planned_steps"]
+        # LambdaLR.load_state_dict restores counters, not the lambda function.
+        # Reconstruct the recorded callable before loading saved scheduler state.
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,
+                    [partial(lr_factor, policy, group=i) for i in range(len(optimizer.param_groups))])
+    else:
+        scheduler = get_linear_schedule_with_warmup(optimizer, int(total_steps * 0.05), total_steps)
     settings = {"model": args.model, "revision": revision, "mode": args.mode, "rank": args.rank,
                 "arguments": vars(args), "train_manifest_sha256": sha256(train_path),
                 "dev_manifest_sha256": sha256(dev_path), "train_examples": len(training),
-                "dev_examples": len(development), **model.parameter_counts(), "environment": environment(device),
+                "dev_examples": len(development), "dev_batch_size": dev_batch_size,
+                **model.parameter_counts(), "environment": environment(device),
                 "dev_selected_ids_sha256": hashlib.sha256("\n".join(r["id"] for r in dev_rows).encode()).hexdigest(),
                 "selection_scope": "epoch-end loss on the fixed selected training-derived development rows",
                 "precision_used": "bf16" if device.type == "cuda" and args.precision != "fp32"
                 and torch.cuda.is_bf16_supported() else "fp32"}
-    start_epoch, start_batch, step, best, stale, elapsed_before = 0, 0, 0, math.inf, 0, 0.0
+    if transition:
+        settings.update({"transition": transition, "scheduler_policy": policy})
+    start_epoch, start_sample, step, best, stale, elapsed_before = 0, 0, 0, math.inf, 0, 0.0
     best_step = None
     monitor = {}
-    if args.resume:
-        # This state is produced locally by this script; never load an untrusted .pt file.
-        state = torch.load(resolve_checkpoint(output / "latest") / "trainer.pt", map_location="cpu", weights_only=False)
-        if saved_settings.get("checkpoint_step") != state["step"]:
-            raise ValueError("Checkpoint save was interrupted: model and optimizer steps differ")
-        if state["train_sha"] != sha256(train_path) or state["dev_sha"] != sha256(dev_path):
-            raise ValueError("Prepared data changed since checkpoint")
+    if restoring:
         optimizer.load_state_dict(state["optimizer"])
         scheduler.load_state_dict(state["scheduler"])
-        start_epoch, start_batch, step = state["epoch"], state["next_batch"], state["step"]
+        if policy and (optimizer.param_groups[0]["lr"] != scheduler.get_last_lr()[0]
+                       or not math.isclose(optimizer.param_groups[0]["lr"],
+                                          policy["base_lrs"][0] * lr_factor(policy, state["step"]),
+                                          rel_tol=1e-12, abs_tol=1e-15)):
+            raise ValueError("Restored next LR does not match the recorded scheduler policy")
+        start_epoch, start_sample = checkpoint_cursor(state, original, len(training))
+        step = state["step"]
         best, stale, elapsed_before = state["best"], state["stale"], state["elapsed_seconds"]
         published_best_step = None
-        if (output / "best.json").exists() or (output / "best").is_dir():
-            best_directory = resolve_checkpoint(output / "best")
+        best_root = output if args.resume else Path(original["output"])
+        if (best_root / "best.json").exists() or (best_root / "best").is_dir():
+            best_directory = resolve_checkpoint(best_root / "best")
             published_best_step = json.loads((best_directory / "experiment.json").read_text(encoding="utf-8"))["checkpoint_step"]
         # Older checkpoints have no recorded best step. Their published best
         # must still exist when a finite best loss is recorded, and cannot be
         # ahead of the resumable state.
         best_step = state.get("best_step", published_best_step if math.isfinite(best) else None)
         validate_best_reference(best, best_step, published_best_step, step)
-        monitor = state.get("monitor", {})
+        if not args.resume and best_step is not None:
+            publish_checkpoint(output / "best", lambda stage: shutil.copytree(best_directory, stage, dirs_exist_ok=True))
+        monitor = dict(state.get("monitor", {}))
+        if not args.resume:
+            for key in ("window_sum", "window_tokens", "window_steps", "window_max_grad_norm"):
+                monitor[key] = 0
+            monitor["window_started"] = elapsed_before
         random.setstate(state["python_rng"])
         torch.set_rng_state(state["torch_rng"])
         if device.type == "cuda" and state["cuda_rng"] is not None:
@@ -151,11 +198,15 @@ def main(args):
                                "checkpoint_age_training_seconds": max(0.0, elapsed_total() - last_checkpoint_elapsed),
                                "planned_optimizer_steps": total_steps})
 
-    def save(epoch, next_batch):
+    def save(epoch, next_sample):
         nonlocal last_checkpoint_elapsed
         last_checkpoint_elapsed = elapsed_total()
         state = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
-                 "epoch": epoch, "next_batch": next_batch, "step": step, "best": best, "best_step": best_step, "stale": stale,
+                 "cursor_version": 2, "epoch": epoch, "next_sample": next_sample,
+                 "next_batch": math.ceil(next_sample / args.batch_size),
+                 "consumed_examples": epoch * len(training) + next_sample,
+                 "scheduler_policy": policy,
+                 "step": step, "best": best, "best_step": best_step, "stale": stale,
                  "elapsed_seconds": elapsed_before + time.perf_counter() - started,
                  "python_rng": random.getstate(), "torch_rng": torch.get_rng_state(),
                  "cuda_rng": torch.cuda.get_rng_state_all() if device.type == "cuda" else None,
@@ -171,9 +222,16 @@ def main(args):
 
         publish_checkpoint(output / "latest", write)
 
+    if restoring and not args.resume:
+        # Publish the imported state before taking a single new optimizer step.
+        save(start_epoch, start_sample)
+        emit({"event": "transition_handoff", "step": step,
+              "next_sample": start_sample, "consumed_examples": start_epoch * len(training) + start_sample,
+              "source_checkpoint": transition["source_checkpoint"],
+              "next_learning_rate": optimizer.param_groups[0]["lr"]}, "checkpoint")
     emit({"event": "session_start", "step": step, "elapsed_seconds": elapsed_total(),
           "dev_examples": len(development), "dev_selected_ids_sha256": settings["dev_selected_ids_sha256"]}, "starting")
-    if args.eval_at_start and not args.resume:
+    if args.eval_at_start and not restoring:
         dev_loss = evaluate_loss(model, dev_loader, device, args.precision)
         last_eval_elapsed = elapsed_total()
         emit({"event": "dev_baseline", "step": step, "dev_loss": dev_loss,
@@ -184,17 +242,19 @@ def main(args):
         if step >= total_steps:
             break
         generator = torch.Generator().manual_seed(args.seed + epoch)
-        loader = DataLoader(training, batch_size=args.batch_size, shuffle=True, generator=generator,
-                            collate_fn=collator, num_workers=0)
+        offset = start_sample if epoch == start_epoch else 0
+        sampler = RandomSampler(training, generator=generator)
+        loader = DataLoader(training, batch_sampler=RemainingBatches(sampler, args.batch_size, offset),
+                            generator=generator, collate_fn=collator, num_workers=0)
         model.train()
         optimizer.zero_grad(set_to_none=True)
-        if epoch != start_epoch or start_batch == 0:
+        if offset == 0:
             epoch_sum, epoch_tokens = 0.0, 0
         group_tokens = 0
         batch_index = -1
+        next_sample = offset
         for batch_index, batch in enumerate(loader):
-            if epoch == start_epoch and batch_index < start_batch:
-                continue
+            next_sample = min(len(training), offset + (batch_index + 1) * args.batch_size)
             batch = {k: v.to(device) for k, v in batch.items()}
             count = int(batch["labels"].ne(-100).sum())
             with precision_context(device, args.precision):
@@ -226,7 +286,8 @@ def main(args):
                 if step % args.log_every == 0:
                     duration = max(elapsed_total() - window_started, 1e-9)
                     emit({"event": "train_window", "epoch": epoch + 1, "step": step,
-                          "epoch_progress": (batch_index + 1) / len(loader),
+                          "epoch_progress": next_sample / len(training),
+                          "consumed_examples": epoch * len(training) + next_sample,
                           "train_loss": epoch_sum / epoch_tokens, "train_loss_scope": "token-weighted cumulative epoch",
                           "window_train_loss": window_sum / max(1, window_tokens), "window_target_tokens": window_tokens,
                           "window_optimizer_steps": window_steps, "window_seconds": duration,
@@ -244,9 +305,9 @@ def main(args):
                     break
                 if batch_index + 1 < len(loader):
                     if args.checkpoint_minutes and elapsed_total() - last_checkpoint_elapsed >= args.checkpoint_minutes * 60:
-                        save(epoch, batch_index + 1)
+                        save(epoch, next_sample)
                         emit({"event": "periodic_checkpoint", "epoch": epoch + 1, "step": step,
-                              "next_batch": batch_index + 1, "elapsed_seconds": elapsed_total()}, "checkpoint")
+                              "next_sample": next_sample, "elapsed_seconds": elapsed_total()}, "checkpoint")
                     if args.eval_minutes and elapsed_total() - last_eval_elapsed >= args.eval_minutes * 60:
                         dev_loss = evaluate_loss(model, dev_loader, device, args.precision)
                         last_eval_elapsed = elapsed_total()
@@ -269,8 +330,8 @@ def main(args):
             best_step = step
             publish_checkpoint(output / "best",
                                lambda stage: model.save(stage, tokenizer, {**settings, "checkpoint_step": step}))
-        save(epoch + 1 if finished_epoch else epoch, 0 if finished_epoch else batch_index + 1)
-        start_batch = 0
+        save(epoch + 1 if finished_epoch else epoch, 0 if finished_epoch else next_sample)
+        start_sample = 0
         if eligible and stale >= args.patience:
             stopped = "early_stopping"
             break
@@ -320,6 +381,7 @@ def parser():
     p.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
     p.add_argument("--gradient-checkpointing", action="store_true")
     p.add_argument("--resume", action="store_true")
+    p.add_argument("--transition-from", help="Immutable local checkpoint to continue into a fresh output segment")
     return p
 
 
