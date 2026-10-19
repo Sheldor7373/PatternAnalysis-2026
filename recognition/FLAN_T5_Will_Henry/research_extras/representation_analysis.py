@@ -50,7 +50,11 @@ def centred_scaled(array):
     if magnitude == 0:
         return None
     array = array / magnitude
+    constant_columns = np.all(array == array[0], axis=0)
     array -= array.mean(axis=0, keepdims=True)
+    # Repeated decimal constants can acquire a mean-rounding residual. Such
+    # columns have exactly zero variance, not a tiny signal to renormalise.
+    array[:, constant_columns] = 0
     magnitude = np.max(np.abs(array))
     return None if magnitude == 0 else array / magnitude
 

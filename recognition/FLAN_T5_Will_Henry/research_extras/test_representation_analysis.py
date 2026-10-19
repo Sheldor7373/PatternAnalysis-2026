@@ -56,12 +56,19 @@ class RepresentationTests(unittest.TestCase):
     def test_degenerate_inputs_are_null_with_reasons_and_serialise_strictly(self):
         for x, y, ids in ((np.ones((6, 3)), self.y, self.ids),
                           (np.zeros((6, 3)), self.y, self.ids),
+                          (np.tile([1., 10., .3], (6, 1)), self.y, self.ids),
                           (self.x[:2], self.y[:2], self.ids[:2])):
             result = linear_cka(x, y, ids, ids)
             self.assertFalse(result["available"])
             self.assertIsNone(result["cka"])
             self.assertTrue(result["unavailable_reason"])
             json.dumps(result, allow_nan=False)
+
+    def test_decimal_constant_columns_do_not_create_spurious_similarity(self):
+        constants = np.tile([1., 10., .3], (6, 1))
+        x = np.column_stack((self.x, constants))
+        y = np.column_stack((self.y, constants))
+        self.assertAlmostEqual(self.cka(x, y), self.cka(self.x, self.y), places=13)
 
     def test_strict_report_ids_order_and_array_validation(self):
         for bad_ids in (self.ids[::-1], ["duplicate"] * 6, self.ids[:-1],
