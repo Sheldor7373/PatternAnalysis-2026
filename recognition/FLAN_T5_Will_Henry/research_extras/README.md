@@ -101,6 +101,6 @@ callback registry with cleanup on normal/exceptional exit; it cannot register
 real framework hooks. Tests cover rank-k algebra, identity patches, known effect,
 span/site/mask errors, finite arithmetic and callback cleanup. Real-model hooks,
 fitting, inference and claims of causal abstraction remain deferred to the
-parent's approved experiment protocol. The conceptual interchange-intervention
+documented experiment protocol. The conceptual interchange-intervention
 background is [Geiger et al. (2021)](https://proceedings.neurips.cc/paper/2021/hash/4f5c422f4d49a5a807eda27434231040-Abstract.html);
 this toy does not reproduce that paper's experiments.
