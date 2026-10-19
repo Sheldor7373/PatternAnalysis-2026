@@ -1,0 +1,108 @@
+Bounded CPU negation inference: execution contract
+=================================================
+
+negation_model_copies.py and negation_runner.py expose an API with no path
+loader, CLI, download, device movement, generation, model saving, checkpoint
+selection or fitting path. Checkpoint preparation and real execution require
+separate authorisation. Tests use tiny random CPU T5/LoRA models; synthetic
+flow-control scores are not evidence of model quality.
+
+Preparation contract
+--------------------
+Callers supply fresh-copy factories and predeclared CheckpointLock identities
+for the frozen, wrapped-reference and merged states, plus an immutable
+checkpoint-selection receipt hash. Identities must not be selected or inferred
+from screen scores. Factory/artifact preparation is separate from the screen's
+forward-call budget. Neither module supplies checkpoint paths or factories.
+
+prepare_copies calls the frozen factory once and wrapped factory twice. Copies
+must already be CPU float32, frozen/eval with no gradients. It rejects reused
+objects/shared storage, wrong state/config locks, multiple/disabled/previously
+merged adapters and non-LoRA wrappers. Only the disposable second wrapped copy
+receives merge_and_unload(safe_merge=True). The reference remains wrapped.
+The merged result must be plain T5 and match the predeclared merged lock.
+Hashes cover all named parameter/buffer state, configuration, attention
+implementation, LoRA config, active/disabled/merged flags and layer scaling.
+These checks bind actual objects to predeclared identities; factories/receipts
+do not independently authenticate artifact origin or execution authorisation.
+
+Real mode additionally requires the pinned real-tokenizer provenance,
+complete46-source PASS, configured EOS1/PAD0/decoder-start0,512-wide8/8-layer
+T5 and fixed encoder.block.3. Synthetic mode is explicitly separate and uses
+16-wide4-encoder/1-decoder tiny random models with a synthetic tokenizer.
+CPU autocast, non-float32/quantized parameters and non-float32 logits are rejected.
+
+Bounded cases and gates
+-----------------------
+run_screen accepts only the fixed four family01 effusion/pneumothorax polarity
+pilot recipients and the fixed16 family01..04 fit-screen recipients. Source
+IDs are checked explicitly. No selection/heldout tensors are built/scored.
+The fixed coordinate e0 has rank1, is never learned/selected and is checked
+unchanged after each comparison. It has no positive intervention-effect gate.
+
+Frozen pilot runs first:4 self comparisons then8 cross-finding conditions.
+Four ordinary wrapped-reference/merged-copy source comparisons then establish
+LoRA merge equivalence. A failed valid-token logit or summed-margin tolerance
+stops before merged pilot execution. The merged pilot then runs the same12
+comparisons. Self valid-token logits are measured at atol=rtol=1e-6, and
+absolute self-margin shift must be<=1e-6. Merge logits/margins use1e-5.
+Logit measurements compare ALL vocabulary logits at attended target positions.
+Self measurements reuse the existing candidate forwards, adding no calls.
+
+The existing deterministic summariser evaluates all pilot numerical/mechanical
+gates. Any failure stops before the substantive panel. Only a complete PASS
+allows16 baseline sources per checkpoint, two candidates/source, on fit only.
+The existing >=ln2/sign/6-of8/per-finding/every-family gate is unchanged.
+Both checkpoints' complete substantive panels remain visible on failure.
+Even a combined PASS returns REVIEW_REQUIRED and fitting_authorised=false;
+there is no subsequent execution path. Exceptions stop, retain partial raw
+receipts/counts as diagnostics only, and remove only owned hooks. Immutable
+state/configuration checks run again after stages and on every exit.
+
+Actual input and score capture
+-----------------------------
+Source receipts read input_ids, attention_mask, eligible_mask and the span
+DIRECTLY from SourceTokens and the span arguments used for encoding/patching.
+They never copy expected_source_input_receipt. Only raw-offset/policy metadata
+is taken from the locked preflight. Separate validation compares the actual
+declarations against that expected record. Calls are checked before/after for
+input/span/basis mutation. Candidate IDs/masks/hashes/counts are captured from
+the actual Candidate tensors supplied to scoring. Repeated baselines must be
+identical. Every row binds checkpoint/basis and recipient/donor actual inputs.
+
+Plain and wrapped reference scoring use ordinary teacher forcing with explicit
+decoder IDs/masks, use_cache=False and no automatic label loss. Decoder start
+is attended even though its token ID equals PAD. Log probabilities are gathered
+in float64, mask padding excluded, final EOS included exactly once, and summed
+without length normalisation. Tiny tests compare the returned sums with manual
+gathers on the actual logits. Returned raw data contains no generated text.
+
+Exact maximum forward budget (single-example calls, no batching/warmup/retry)
+---------------------------------------------------------------------------
+Stage / model role                 Encoder calls   Decoder calls
+Pilot frozen                       36              48
+Pilot merged LoRA incl.equivalence  40              56
+Pilot wrapped reference             4               8
+PILOT TOTAL                        80             112
+Substantive frozen                 16              32
+Substantive merged LoRA             16              32
+Substantive wrapped reference        0               0
+SUBSTANTIVE TOTAL                  32              64
+MAXIMUM COMBINED                   112             176
+
+Each of12 adapter comparisons/checkpoint uses3 encoder calls and4 candidate
+decoder calls. Merge equivalence adds4 encoder+8 decoder calls to each of the
+wrapped reference and merged copy. Each substantive source uses1 encoder+2
+decoder calls. Forward pre-hooks enforce separate role/stage ceilings BEFORE
+an excess call executes; completed stages must equal their exact budget.
+Early failures use less. There are no hidden model forwards during preparation.
+
+Additional bounded CPU work:6 complete state/config fingerprints during copy
+preparation and14 during a successful complete screen, plus3 initial finite
+state scans. Candidate calls check flags/devices/dtypes without rescanning the
+full model weights. Factories/deserialisation and independent lock creation
+are outside this accounting and require separate authorisation and scheduling. Three
+fresh CPU model copies are retained (frozen, wrapped reference, merged); real
+memory/wall time has not been measured or extrapolated from tiny fixtures.
+Sources and candidates retain a hard cap of64 tokens including EOS. A complete
+preflight is required; neither module runs a tokenizer or changes its receipt.

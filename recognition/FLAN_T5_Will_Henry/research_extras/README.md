@@ -226,15 +226,32 @@ real tokenizer asset/class/options receipt; synthetic PASS fixtures cannot be
 promoted to real evidence. See `negation_receipts.py` and its adversarial tests.
 Receipt consistency does not authenticate model execution or log probabilities.
 
-The original strict-policy offline preflight against the pinned tokenizer stopped on
-`fit/negation-01/effusion/absent` with `span_boundary` for prompt-offset
-`[97,116)`. Its FAIL receipt remains preserved. A separately authorised exact
-trace showed token465 covers `[96,99)` (newline plus `No`). Parent approved the
-explicit shared whitespace-overhang policy without changing source text,
-prompt, token IDs, raw offsets, character spans or caps. A new complete offline
-preflight is separately permitted after the tests; no model execution follows
-automatically. The summary tests use synthetic tokenization/scores.
+The mapping tests include a saved raw-offset trace and synthetic boundary cases.
+Whitespace-only overhang is recorded without changing source text, token IDs,
+raw offsets, declared spans or caps. Saved-score tests remain synthetic.
 
 ```powershell
-python -B -m unittest test_negation_mapping test_negation_preflight test_negation_summary -v
+python -B -m unittest test_negation_mapping test_negation_preflight test_negation_receipts test_negation_summary -v
+```
+
+## Bounded CPU negation inference
+
+`negation_model_copies.py` prepares separate locked CPU float32 T5/LoRA copies
+from caller-supplied factories. `negation_runner.py` runs the fixed mechanical
+pilot and, only after its gates pass, the fit-only substantive screen. It binds
+score receipts to actual call tensors, checks immutable model/input/basis state
+and enforces separate role/stage forward limits.
+
+The API has no path loader, CLI, generation, fitting, checkpoint selection or
+selection/heldout scoring. Checkpoint preparation and real execution require
+separate authorisation. See
+[negation_execution_contract.txt](negation_execution_contract.txt) for copy
+prerequisites, exact call budgets, gates and evidence limitations.
+
+Tests use seeded tiny random CPU T5/LoRA models and load no pretrained assets.
+Mocked flow-control scores are labelled synthetic and are not model-quality
+evidence. The tiny-model suite requires PyTorch, Transformers and PEFT:
+
+```powershell
+python -B -m unittest test_negation_model_copies test_negation_runner -v
 ```

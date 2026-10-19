@@ -35,13 +35,15 @@ def state_fingerprint(model):
     return result.hexdigest()
 
 
-def frozen_float32_cpu(model):
+def frozen_float32_cpu(model, *, check_finite=True):
     if any(module.training for module in model.modules()) or any(p.requires_grad or p.grad is not None for p in model.parameters()):
         raise ValueError("Fresh copies must already be frozen/eval with no gradients")
+    if any(parameter.dtype != torch.float32 for parameter in model.parameters()):
+        raise ValueError("Every model parameter must be float32; quantized/integer parameters are unsupported")
     for value in list(model.parameters()) + list(model.buffers()):
         if value.device.type != "cpu" or (value.is_floating_point() and value.dtype != torch.float32):
             raise ValueError("CPU float32 copies required; no device/dtype movement is performed")
-        if value.is_floating_point() and not bool(torch.isfinite(value).all()):
+        if check_finite and value.is_floating_point() and not bool(torch.isfinite(value).all()):
             raise ValueError("Nonfinite checkpoint state")
 
 
@@ -82,7 +84,7 @@ class PreparedCopies:
         for model, expected in ((self.frozen, self.lock.frozen_state_sha256),
                                 (self.wrapped_reference, self.lock.wrapped_state_sha256),
                                 (self.merged, self.lock.merged_state_sha256)):
-            frozen_float32_cpu(model)
+            frozen_float32_cpu(model, check_finite=False)  # Exact lock hash detects all subsequent state changes.
             if state_fingerprint(model) != expected:
                 raise ValueError("Immutable checkpoint state/config changed")
         disjoint_storage(self.frozen, self.wrapped_reference, self.merged)
