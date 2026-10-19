@@ -15,7 +15,7 @@ from dataset import ReportDataset, read_jsonl, select_rows, write_json
 from modules import MODEL, RadiologySimplifier, choose_device, load_checkpoint
 from runtime import append_jsonl, environment, memory_stats, precision_context, reset_memory, set_seed, sha256, synchronise
 from checkpoint_storage import publish_checkpoint, resolve_checkpoint
-from training_control import selection_point, update_selection
+from training_control import selection_point, update_selection, validate_best_reference
 
 
 def evaluate_loss(model, loader, device, precision):
@@ -83,6 +83,7 @@ def main(args):
                 "precision_used": "bf16" if device.type == "cuda" and args.precision != "fp32"
                 and torch.cuda.is_bf16_supported() else "fp32"}
     start_epoch, start_batch, step, best, stale, elapsed_before = 0, 0, 0, math.inf, 0, 0.0
+    best_step = None
     if args.resume:
         # This state is produced locally by this script; never load an untrusted .pt file.
         state = torch.load(resolve_checkpoint(output / "latest") / "trainer.pt", map_location="cpu", weights_only=False)
@@ -94,6 +95,15 @@ def main(args):
         scheduler.load_state_dict(state["scheduler"])
         start_epoch, start_batch, step = state["epoch"], state["next_batch"], state["step"]
         best, stale, elapsed_before = state["best"], state["stale"], state["elapsed_seconds"]
+        published_best_step = None
+        if (output / "best.json").exists() or (output / "best").is_dir():
+            best_directory = resolve_checkpoint(output / "best")
+            published_best_step = json.loads((best_directory / "experiment.json").read_text(encoding="utf-8"))["checkpoint_step"]
+        # Older checkpoints have no recorded best step. Their published best
+        # must still exist when a finite best loss is recorded, and cannot be
+        # ahead of the resumable state.
+        best_step = state.get("best_step", published_best_step if math.isfinite(best) else None)
+        validate_best_reference(best, best_step, published_best_step, step)
         random.setstate(state["python_rng"])
         torch.set_rng_state(state["torch_rng"])
         if device.type == "cuda" and state["cuda_rng"] is not None:
@@ -105,7 +115,7 @@ def main(args):
 
     def save(epoch, next_batch):
         state = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
-                 "epoch": epoch, "next_batch": next_batch, "step": step, "best": best, "stale": stale,
+                 "epoch": epoch, "next_batch": next_batch, "step": step, "best": best, "best_step": best_step, "stale": stale,
                  "elapsed_seconds": elapsed_before + time.perf_counter() - started,
                  "python_rng": random.getstate(), "torch_rng": torch.get_rng_state(),
                  "cuda_rng": torch.cuda.get_rng_state_all() if device.type == "cuda" else None,
@@ -173,6 +183,7 @@ def main(args):
         append_jsonl(output / "history.jsonl", entry)
         best, stale, improved = update_selection(best, stale, dev_loss, eligible, args.min_delta)
         if improved:
+            best_step = step
             publish_checkpoint(output / "best",
                                lambda stage: model.save(stage, tokenizer, {**settings, "checkpoint_step": step}))
         save(epoch + 1 if finished_epoch else epoch, 0 if finished_epoch else batch_index + 1)

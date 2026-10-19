@@ -1,8 +1,16 @@
 import unittest
-from training_control import selection_point, update_selection
+from training_control import selection_point, update_selection, validate_best_reference
 
 
 class SelectionTests(unittest.TestCase):
+    def test_best_checkpoint_matches_resumable_state(self):
+        validate_best_reference(float("inf"), None, None, 1)
+        validate_best_reference(1.0, 3, 3, 4)
+        for values in [(1.0, 3, 4, 3), (float("inf"), None, 1, 0),
+                       (1.0, 3, None, 4), (1.0, 4, 4, 3)]:
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                validate_best_reference(*values)
+
     def test_diagnostic_partial_epoch_does_not_change_best_or_patience(self):
         self.assertEqual(update_selection(1.0, 1, 0.1, False, 0.001), (1.0, 1, False))
         self.assertEqual(update_selection(1.0, 1, 5.0, False, 0.001), (1.0, 1, False))
