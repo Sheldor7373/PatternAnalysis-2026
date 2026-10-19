@@ -77,3 +77,30 @@ The module verifies consistency of recorded metadata, not upstream extraction or
 weight provenance. Tests provide the complete synthetic schema. Source files
 are fingerprinted/read-only and existing output files cannot be replaced.
 No official validation arrays are accepted. Shared PCA is deliberately deferred.
+
+## Projection-swap toy only
+
+```powershell
+python -B -m unittest test_toy_interventions -v
+python -B toy_interventions.py --output ../runs/toy-intervention.json
+```
+
+`toy_interventions.py` accepts token-by-feature arrays and an explicitly supplied
+rank-k orthonormal column basis `Q`; it computes `base + (source - base) @ Q @ Q.T`
+on declared equal-length half-open token spans. It preserves the orthogonal
+complement and all positions outside the base span. Named base/source sites must
+match exactly; width/rank, bounds, Boolean token masks and orthonormality are
+validated. Inputs are copied. The module never fits a basis or infers alignment.
+It has no model/version information and is **not** an adapter for real activations.
+
+The deterministic toy has a rotated causal coordinate, an orthogonal nuisance
+coordinate and a known linear score. Patching the causal coordinate changes the
+score by -9; the nuisance control changes it by zero within floating-point error.
+These are constructed arithmetic checks, not model effects. `ToySite` is a local
+callback registry with cleanup on normal/exceptional exit; it cannot register
+real framework hooks. Tests cover rank-k algebra, identity patches, known effect,
+span/site/mask errors, finite arithmetic and callback cleanup. Real-model hooks,
+fitting, inference and claims of causal abstraction remain deferred to the
+parent's approved experiment protocol. The conceptual interchange-intervention
+background is [Geiger et al. (2021)](https://proceedings.neurips.cc/paper/2021/hash/4f5c422f4d49a5a807eda27434231040-Abstract.html);
+this toy does not reproduce that paper's experiments.
