@@ -27,7 +27,8 @@ class ModelTests(unittest.TestCase):
                                     "No": 3, "effusion": 4, "Fluid": 5, "absent": 6}, unk_token="<unk>"))
         base.pre_tokenizer = Whitespace()
         cls.tokenizer = PreTrainedTokenizerFast(tokenizer_object=base, pad_token="<pad>",
-                                               eos_token="</s>", unk_token="<unk>")
+                                               eos_token="</s>", unk_token="<unk>",
+                                               model_input_names=["input_ids", "attention_mask"])
         cls.tokenizer.save_pretrained(cls.path)
         config = T5Config(vocab_size=7, d_model=16, d_kv=8, d_ff=32, num_layers=1, num_decoder_layers=1,
                           num_heads=2, decoder_start_token_id=0, pad_token_id=0, eos_token_id=1, dropout_rate=0.0)
