@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 
 from negation_preflight import MODELS, digest, token_record, validate_contract
+from negation_mapping import POLICY_VERSION, map_source_span
 
 AGGREGATION = "sum; padding excluded; no length normalisation"
 CONDITIONS = {"learned_true", "permuted_3720", "random_3711", "random_3712", "random_3713"}
@@ -60,6 +61,11 @@ def validate_preflight(manifest, report):
     require(type(eos) is int and eos >= 0 and type(report["pad_token_id"]) is int
             and report["pad_token_id"] >= 0 and eos != report["pad_token_id"], "Invalid EOS/pad receipt")
     contract = manifest["input_contract"]
+    require(report["mapping_policy_version"] == POLICY_VERSION, "Unsupported span-mapping policy")
+    specials = report["special_token_ids"]
+    require(isinstance(specials, list) and all(type(n) is int and n >= 0 for n in specials)
+            and len(specials) == len(set(specials)) and eos in specials and report["pad_token_id"] in specials,
+            "Invalid special-token identity receipt")
     for identity in sorted(records):
         row, saved = sources[identity], records[identity]
         require((saved["split"], saved["family_id"]) == (row["split"], row["family_id"]), "Preflight split/family mismatch")
@@ -84,20 +90,10 @@ def validate_preflight(manifest, report):
                 and source["combined_char_span"] == [start, stop] and source["source_span_text"] == row["source_span_text"],
                 "Prompt-offset/source-span receipt mismatch")
         require(len(offsets) == len(eligible) and offsets[-1] == [0, 0] and not eligible[-1], "Invalid source offsets/EOS eligibility")
-        covered, selected = set(), []
-        for i, pair in enumerate(offsets[:-1]):
-            require(len(pair) == 2 and all(type(n) is int for n in pair)
-                    and 0 <= pair[0] < pair[1] <= len(text), "Invalid complete source offsets")
-            a, b = pair
-            covered.update(range(a, b))
-            require(not eligible[i] or a >= len(contract["prompt"]), "Prompt token marked eligible")
-            if max(a, start) < min(b, stop):
-                selected.append(i)
-                require(a >= start and b <= stop and eligible[i], "Span straddles boundary or includes an ineligible token")
-        require(all(char.isspace() or i in covered for i, char in enumerate(text)), "Incomplete source offset coverage")
-        require(bool(selected) and selected == list(range(selected[0], selected[-1] + 1))
-                and offsets[selected[0]][0] == start and offsets[selected[-1]][1] == stop
-                and source["token_span"] == [selected[0], selected[-1] + 1], "Whole-token span alignment mismatch")
+        mapped = map_source_span(text, len(contract["prompt"]), row["source_char_span"], source["input_ids"],
+                                 offsets, source["attention_mask"], specials)
+        require(source["token_span"] == mapped["token_span"] and eligible == mapped["eligible_mask"]
+                and source["span_mapping"] == mapped["mapping"], "Shared span/eligibility policy receipt mismatch")
     return records
 
 

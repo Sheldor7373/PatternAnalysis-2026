@@ -87,7 +87,7 @@ class PreflightTests(unittest.TestCase):
                 result = super().__call__(text, **kwargs)
                 for pair in result["offset_mapping"]:
                     if pair[0] == prompt_end:
-                        pair[0] -= 1
+                        pair[0] -= 2  # Includes prompt punctuation, not just its final newline.
                         break
                 return result
         tokenizer = Straddling(self.manifest)

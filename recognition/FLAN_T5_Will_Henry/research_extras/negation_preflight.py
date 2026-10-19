@@ -13,6 +13,8 @@ from pathlib import Path
 import re
 import unicodedata
 
+from negation_mapping import POLICY_VERSION, MappingFailure as PreflightFailure, map_source_span
+
 PINNED_REVISION = "0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab"
 MODELS = ("frozen", "lora_merged_copy")
 
@@ -109,12 +111,6 @@ def token_record(ids, mask, eligible=None):
     return result
 
 
-class PreflightFailure(ValueError):
-    def __init__(self, code, detail):
-        super().__init__(detail)
-        self.code = code
-
-
 def bare_encoding(tokenizer, text):
     encoded = tokenizer(text, add_special_tokens=False, truncation=False,
                         return_offsets_mapping=True, return_attention_mask=True)
@@ -144,18 +140,10 @@ def encode_source(tokenizer, row, contract):
     if len(ids) > contract["max_source_tokens"]:
         raise PreflightFailure("source_cap", f"Complete source has {len(ids)} tokens including EOS; cap={contract['max_source_tokens']}")
     start, stop = [len(prompt) + value for value in row["source_char_span"]]
-    selected = [i for i, (a, b) in enumerate(offsets) if max(a, start) < min(b, stop)]
-    if (not selected or selected != list(range(selected[0], selected[-1] + 1))
-            or offsets[selected[0]][0] != start or offsets[selected[-1]][1] != stop
-            or any(a < start or b > stop for i in selected for a, b in [offsets[i]])):
-        raise PreflightFailure("span_boundary", f"Fixed span [{start},{stop}) after prompt does not align to whole contiguous tokens")
-    special = set(tokenizer.all_special_ids)
-    eligible = [a >= len(prompt) and b <= len(text) and a < b and token not in special
-                for token, (a, b) in zip(ids, offsets)]
-    if not all(eligible[i] for i in selected):
-        raise PreflightFailure("eligibility", "Fixed span includes a prompt/special/EOS/ineligible token")
-    result = token_record(ids, [True] * len(ids), eligible)
-    result.update(offset_mapping=offsets, token_span=[selected[0], selected[-1] + 1],
+    mapped = map_source_span(text, len(prompt), row["source_char_span"], ids, offsets,
+                             [True] * len(ids), tokenizer.all_special_ids)
+    result = token_record(ids, [True] * len(ids), mapped["eligible_mask"])
+    result.update(offset_mapping=offsets, token_span=mapped["token_span"], span_mapping=mapped["mapping"],
                   prompt_characters=len(prompt), combined_char_span=[start, stop],
                   source_span_text=row["source_span_text"], eos_included=True)
     return result
@@ -182,6 +170,7 @@ def preflight(manifest, tokenizer, identity=None):
     report = {"schema_version": 1, "status": "PASS", "protocol_sha256": digest(manifest),
               "tokenizer": identity or {"kind": "synthetic tokenizer fixture"},
               "eos_token_id": tokenizer.eos_token_id, "pad_token_id": tokenizer.pad_token_id,
+              "special_token_ids": sorted(set(tokenizer.all_special_ids)), "mapping_policy_version": POLICY_VERSION,
               "records": [], "failure": None, "manifest_modified": False,
               "scope": "tokenization/structural checks only; not label approval or model evidence"}
     before = digest(manifest)

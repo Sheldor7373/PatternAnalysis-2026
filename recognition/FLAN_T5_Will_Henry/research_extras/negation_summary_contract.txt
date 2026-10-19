@@ -6,13 +6,20 @@ never calls the lazy tokenizer loader, torch, a model, a merge or a fitter.
 The optional donor-finding distractor and cardiac readouts remain disabled.
 The committed protocol and source/candidate texts/spans/caps are unchanged.
 
-The one authorised offline tokenizer pass STOPPED on the first source,
+The original strict-policy offline tokenizer pass STOPPED on the first source,
 fit/negation-01/effusion/absent: span_boundary at prompt-offset [97,116).
 No complete source record passed. This failed receipt is rejected by the
 summariser. All calculation tests use an explicitly synthetic tokenizer and
 synthetic candidate scores, not pretrained model results. No rerun or span
-adjustment was performed. A later real execution requires parent resolution
-of that alignment failure, plus all existing runtime/model/fitting reviews.
+adjustment was performed in that pass. Parent subsequently approved the shared
+whitespace-overhang-v1 mapper after an exact one-case diagnostic. The token
+overhang was only the prompt newline. The shared mapper preserves every raw
+offset/ID and fixed character span: outside characters must all be whitespace,
+with non-whitespace inside a boundary token. Contiguous selected indices cover
+all non-whitespace span characters and retain internal whitespace tokens.
+Prompt-only tokens/specials/EOS remain ineligible. Policy and exception receipts
+are rechecked identically by preflight and summary. A new complete offline
+preflight is separately permitted after tests; all model/fitting reviews remain.
 
 CLI (future saved inputs only; not an instruction to run models):
 python -B negation_summary.py --manifest negation_experiment/negation_manifest.json

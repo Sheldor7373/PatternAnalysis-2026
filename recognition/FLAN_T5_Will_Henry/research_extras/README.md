@@ -190,8 +190,13 @@ repository. No model is loaded or executed.
 
 The complete prompt+source is encoded without truncation or automatic special
 tokens, then one configured EOS is appended. Character spans add the exact
-prompt offset and must align to whole contiguous tokens. Prompt, special tokens,
-EOS and padding are ineligible; all selected tokens must be eligible/attended.
+prompt offset and use the shared `negation_mapping.py` policy
+`whitespace-overhang-v1`. A boundary token may overhang only whitespace and
+must contain non-whitespace inside the unchanged character span. Contiguous
+selected tokens must cover every non-whitespace span character; internal
+whitespace tokens are retained. Prompt-only tokens, specials, EOS and masked
+tokens are ineligible. Raw offsets remain unchanged. Policy version and every
+accepted boundary exception are recorded and rechecked by the summariser.
 Candidate text likewise receives exactly one final EOS and an explicit target
 mask. Complete lengths include EOS and must fit the unchanged protocol caps.
 Any boundary/coverage/eligibility/cap/EOS failure stops at that case, saves a
@@ -215,12 +220,15 @@ tokenizer executes. Read [negation_summary_contract.txt](negation_summary_contra
 for the score/measurement receipt schema, selection tie rule and limitations.
 Missing mechanical evidence is `UNAVAILABLE`; fitting remains unauthorised.
 
-The single offline preflight against the pinned cached tokenizer stopped on
+The original strict-policy offline preflight against the pinned tokenizer stopped on
 `fit/negation-01/effusion/absent` with `span_boundary` for prompt-offset
-`[97,116)`. Zero complete records passed. There was no rerun or protocol change.
-The summary tests use synthetic tokenization/scores; passing them does not
-resolve that real alignment failure. Run only these CPU arithmetic tests:
+`[97,116)`. Its FAIL receipt remains preserved. A separately authorised exact
+trace showed token465 covers `[96,99)` (newline plus `No`). Parent approved the
+explicit shared whitespace-overhang policy without changing source text,
+prompt, token IDs, raw offsets, character spans or caps. A new complete offline
+preflight is separately permitted after the tests; no model execution follows
+automatically. The summary tests use synthetic tokenization/scores.
 
 ```powershell
-python -B -m unittest test_negation_preflight test_negation_summary -v
+python -B -m unittest test_negation_mapping test_negation_preflight test_negation_summary -v
 ```
