@@ -84,6 +84,8 @@ def main(args):
     if args.resume:
         # This state is produced locally by this script; never load an untrusted .pt file.
         state = torch.load(output / "latest" / "trainer.pt", map_location="cpu", weights_only=False)
+        if saved_settings.get("checkpoint_step") != state["step"]:
+            raise ValueError("Checkpoint save was interrupted: model and optimizer steps differ")
         if state["train_sha"] != sha256(train_path) or state["dev_sha"] != sha256(dev_path):
             raise ValueError("Prepared data changed since checkpoint")
         optimizer.load_state_dict(state["optimizer"])
@@ -100,7 +102,7 @@ def main(args):
     trained_tokens = 0
 
     def save(epoch, next_batch):
-        model.save(output / "latest", tokenizer, settings)
+        model.save(output / "latest", tokenizer, {**settings, "checkpoint_step": step})
         state = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
                  "epoch": epoch, "next_batch": next_batch, "step": step, "best": best, "stale": stale,
                  "elapsed_seconds": elapsed_before + time.perf_counter() - started,
@@ -164,7 +166,7 @@ def main(args):
         append_jsonl(output / "history.jsonl", entry)
         if dev_loss < best - args.min_delta:
             best, stale = dev_loss, 0
-            model.save(output / "best", tokenizer, settings)
+            model.save(output / "best", tokenizer, {**settings, "checkpoint_step": step})
         else:
             stale += 1
         finished_epoch = batch_index + 1 == len(loader)
