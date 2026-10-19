@@ -70,6 +70,15 @@ class RepresentationTests(unittest.TestCase):
         y = np.column_stack((self.y, constants))
         self.assertAlmostEqual(self.cka(x, y), self.cka(self.x, self.y), places=13)
 
+    def test_large_constant_column_does_not_erase_tiny_varying_feature(self):
+        y = np.array([-2., -1., 1., 2.])[:, None]
+        x = np.column_stack((y[:, 0] * 1e-100, np.full(4, 1e300)))
+        ids = [f"synthetic-{i}" for i in range(4)]
+        with np.errstate(all="raise"):
+            result = linear_cka(x, y, ids, ids)
+        self.assertTrue(result["available"])
+        self.assertAlmostEqual(result["cka"], 1., places=13)
+
     def test_strict_report_ids_order_and_array_validation(self):
         for bad_ids in (self.ids[::-1], ["duplicate"] * 6, self.ids[:-1],
                         [" "] + self.ids[1:], ["a\nb"] + self.ids[1:], list(range(6))):

@@ -46,11 +46,13 @@ def report_ids(values, count):
 def centred_scaled(array):
     # Positive isotropic rescaling before/after centring preserves CKA and avoids
     # overflow/underflow from finite but extreme input magnitudes.
+    # Remove exact constants first so large offsets cannot erase varying features.
+    constant_columns = np.all(array == array[0], axis=0)
+    array = np.where(constant_columns, 0.0, array)
     magnitude = np.max(np.abs(array))
     if magnitude == 0:
         return None
     array = array / magnitude
-    constant_columns = np.all(array == array[0], axis=0)
     array -= array.mean(axis=0, keepdims=True)
     # Repeated decimal constants can acquire a mean-rounding residual. Such
     # columns have exactly zero variance, not a tiny signal to renormalise.
