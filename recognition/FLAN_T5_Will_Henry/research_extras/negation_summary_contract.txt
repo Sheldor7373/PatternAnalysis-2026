@@ -1,0 +1,114 @@
+Saved-score summary contract (implementation; no model runner)
+============================================================
+
+negation_summary.py uses stdlib only. It imports pure preflight helpers; it
+never calls the lazy tokenizer loader, torch, a model, a merge or a fitter.
+The optional donor-finding distractor and cardiac readouts remain disabled.
+The committed protocol and source/candidate texts/spans/caps are unchanged.
+
+The one authorised offline tokenizer pass STOPPED on the first source,
+fit/negation-01/effusion/absent: span_boundary at prompt-offset [97,116).
+No complete source record passed. This failed receipt is rejected by the
+summariser. All calculation tests use an explicitly synthetic tokenizer and
+synthetic candidate scores, not pretrained model results. No rerun or span
+adjustment was performed. A later real execution requires parent resolution
+of that alignment failure, plus all existing runtime/model/fitting reviews.
+
+CLI (future saved inputs only; not an instruction to run models):
+python -B negation_summary.py --manifest negation_experiment/negation_manifest.json
+  --preflight PASS.json --scores SAVED.json --output ../runs/NEW-summary.json
+The output must be new, outside the protocol folder and distinct from inputs.
+JSON serialisation rejects nonfinite values. Input files are never rewritten.
+
+Score envelope:
+{
+  "data_kind": "synthetic_test_scores" OR "saved_model_scores",
+  "protocol_sha256": digest(parsed_manifest),
+  "preflight_sha256": digest(parsed_complete_PASS_preflight),
+  "stage": "pilot" OR "substantive" OR "selection" OR "heldout",
+  "basis_condition": condition,
+  "checkpoint_ids": {"frozen": sha256, "lora_merged_copy": sha256},
+  "basis_ids": {"frozen": sha256, "lora_merged_copy": sha256},
+  "snapshot_step": 32 OR 64 (required for learned_true selection only),
+  "baselines": [{"model": role, "source_id": fixed_id,
+                 "positive": score, "negative": score}],
+  "patches": [{"model": role, "case_id": fixed_case_id OR "self:"+source_id,
+               "positive": score, "negative": score}]
+}
+digest is canonical JSON SHA256 (sort_keys, compact separators, UTF-8,
+ensure_ascii=False, allow_nan=False); it is not a file-byte SHA256.
+checkpoint_ids identify the fixed checkpoint measurement receipts; basis_ids
+identify the evaluated basis receipts. No weights/bases are opened to verify
+those declarations. Use exact recorded identities, never placeholder hashes
+for real evidence. The test fixtures intentionally use obvious dummy hashes.
+
+score = {
+  "summed_logprob": finite number <= 0,
+  "token_count": explicit attended target-token count including EOS,
+  "eos_included": true,
+  "aggregation": "sum; padding excluded; no length normalisation",
+  "token_ids_sha256": matching preflight candidate token_ids_sha256,
+  "target_mask_sha256": matching preflight candidate target_mask_sha256
+}
+An optional margin must exactly equal positive sum minus negative sum.
+The existing adapter's score dictionary needs these two hash fields attached
+from its exact input receipt; this module does not generate those scores.
+Counts derive from masks, not comparison with pad ID. The preflight artifact
+is unpadded and must have exactly one final attended EOS, complete source
+offset coverage, aligned eligible spans and all46 unique records. Its hashes,
+counts, offsets, split/family identities and eligibility are rechecked here.
+
+Exact stage panels (both checkpoints, no omissions/duplicates/extra cases):
+- pilot: four family01 baselines, eight interventions plus four self rows;
+  coordinate_e0 condition; immutable basis_ids required.
+- substantive: all16 fit baselines only, no patches; condition none;
+  basis_ids unused. All8 input pairs remain visible even when the gate fails.
+- selection: all12 selection recipient baselines,24 interventions,12 self;
+  one separately recorded condition per envelope.
+- heldout: six heldout recipient baselines,24 interventions,six self;
+  never fit/selection sources. A selection_lock must match the envelope's
+  protocol_sha256, preflight_sha256, checkpoint_ids, basis_ids, basis_condition
+  and include selection_summary_sha256. This checks receipt consistency,
+  not independently the timing, content or approval of prior selection.
+Allowed selection/heldout conditions: learned_true, permuted_3720,
+random_3711, random_3712, random_3713. They are reported separately; no seed
+selection, pooled-null p-value or shuffled evaluation labels are implemented.
+
+Outputs retain sorted raw positive/negative sums, counts, EOS and hashes.
+They derive M, I and P, equal-family means, paired LoRA-minus-frozen I/P,
+AP/PA signed shifts, AA/PP signed and absolute drift, baseline and patched
+preferences, separate directional donor-consistency/flip/tie counts and
+denominators by family, plus matched joint bidirectional flip indicators.
+A flip requires correct baseline recipient preference and donor-consistent
+post-patch preference. Positive P alone is insufficient. P_A=AP-AA and
+P_P=PP-PA are algebraically the reported paired donor-polarity contrasts.
+
+Substantive pair success requires I>=ln(2), M_present>0 and M_absent<0.
+Each checkpoint needs >=6/8 successes, >=3/4 per finding and positive mean I
+in every family; BOTH checkpoints must pass. Pilot input contrasts must all
+be strictly >1e-6; arbitrary coordinate e0 has no positive-P gate.
+
+Optional pilot mechanical_evidence[model] contains:
+- parameters_before_sha256, parameters_after_sha256 (must match);
+- self_logits: one {source_id,max_normalised_error,atol:1e-6,rtol:1e-6}
+  receipt for each pilot source;
+- for lora_merged_copy only, merge_equivalence: one {source_id,
+  max_normalised_logit_error,reference_margin,atol:1e-5,rtol:1e-5} per source.
+Normalised error means max(abs(actual-reference)/(atol+rtol*abs(reference)))
+over ALL compared valid logits, and must be <=1. Merge margins are compared
+with atol+rtol*abs(reference_margin). Self margins are derived from saved
+scores and must have absolute shift<=1e-6. These are declared measurement
+receipts: no parameter tensors or logits are remeasured by this module.
+Missing checkpoint mechanical receipts yield UNAVAILABLE, never PASS;
+observed receipt/self-margin/input failures yield FAIL.
+
+prefit_gate(pilot_summary,substantive_summary) checks matching protocol,
+preflight, checkpoint and provenance kind; both gates must pass. It returns
+UNAVAILABLE when mechanics are missing. select_snapshots(summary32,summary64)
+accepts learned_true SELECTION reports only and chooses per checkpoint by
+equal-family P; differences<=1e-6 choose32. It does not choose controls or
+inspect heldout. Snapshot receipts and input score hashes remain recorded.
+Neither API authorises model execution, fitting or publication. All reports
+explicitly retain fitting_authorised=false. Gate failure diagnoses this fixed
+readout/comparison, not absence of a model representation. No confidence,
+safety, free-generation fidelity or clinical-label approval is inferred.

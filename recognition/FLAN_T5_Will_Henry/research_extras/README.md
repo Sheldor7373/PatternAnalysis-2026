@@ -204,3 +204,23 @@ Hashes distinguish full token IDs, explicit masks and complete forward inputs.
 change it; the full forward fingerprint still changes. Counts use masks, never
 comparison with the pad-token ID. Outputs retain token IDs/offsets/masks/counts
 for human inspection; the source manifest's null fields remain unchanged.
+
+## Negation saved-score summary
+
+`negation_summary.py` calculates the fixed protocol's input/intervention
+contrasts, directional shifts, drift, preference/flip/tie counts, equal-family
+means, paired checkpoint differences and screening gates from saved scores.
+It requires a complete PASS preflight and exact case coverage; no model or
+tokenizer executes. Read [negation_summary_contract.txt](negation_summary_contract.txt)
+for the score/measurement receipt schema, selection tie rule and limitations.
+Missing mechanical evidence is `UNAVAILABLE`; fitting remains unauthorised.
+
+The single offline preflight against the pinned cached tokenizer stopped on
+`fit/negation-01/effusion/absent` with `span_boundary` for prompt-offset
+`[97,116)`. Zero complete records passed. There was no rerun or protocol change.
+The summary tests use synthetic tokenization/scores; passing them does not
+resolve that real alignment failure. Run only these CPU arithmetic tests:
+
+```powershell
+python -B -m unittest test_negation_preflight test_negation_summary -v
+```
