@@ -168,3 +168,39 @@ only. Future subspace fitting requires a separately reviewed differentiable
 path; this module does not train `Q`. Pretrained execution, GPU use, basis
 fitting, clinical labels and final evaluation remain outside this module's test
 evidence and await the documented experiment protocol.
+
+## Negation tokenizer/span preflight
+
+`negation_preflight.py` reads the fixed manifest without modifying it. Synthetic
+tokenizer fixtures exercise it in `test_negation_preflight.py`; no pretrained
+assets are used by those tests. The CLI requires the expected manifest file
+SHA256, an explicit local tokenizer directory ending in the pinned revision,
+and a new output outside both the protocol and tokenizer directories.
+
+```powershell
+python -B -m unittest test_negation_preflight -v
+python -B negation_preflight.py --manifest negation_experiment/negation_manifest.json --expected-manifest-sha256 SHA256 --tokenizer PATH_TO_PINNED_CACHE --output ../runs/negation-preflight.json
+```
+
+Only the cached fast tokenizer is loaded, with `local_files_only=True` and
+`trust_remote_code=False`. Small tokenizer/config files are fingerprinted; model
+weights are never read. The directory's revision label and file hashes are
+recorded as offline provenance, not independent verification against a remote
+repository. No model is loaded or executed.
+
+The complete prompt+source is encoded without truncation or automatic special
+tokens, then one configured EOS is appended. Character spans add the exact
+prompt offset and must align to whole contiguous tokens. Prompt, special tokens,
+EOS and padding are ineligible; all selected tokens must be eligible/attended.
+Candidate text likewise receives exactly one final EOS and an explicit target
+mask. Complete lengths include EOS and must fit the unchanged protocol caps.
+Any boundary/coverage/eligibility/cap/EOS failure stops at that case, saves a
+FAIL report and exits1, without adjusting spans, text or limits. Completed
+records before a failure are diagnostic only; a failed report cannot authorise
+scoring or fitting. Labels remain proposed, not clinically approved.
+
+Hashes distinguish full token IDs, explicit masks and complete forward inputs.
+`active_tokens_sha256` hashes only attended IDs, so changing masked IDs does not
+change it; the full forward fingerprint still changes. Counts use masks, never
+comparison with the pad-token ID. Outputs retain token IDs/offsets/masks/counts
+for human inspection; the source manifest's null fields remain unchanged.
