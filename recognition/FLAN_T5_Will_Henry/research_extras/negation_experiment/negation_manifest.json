@@ -1,0 +1,3321 @@
+{
+  "schema_version": 1,
+  "protocol_id": "negation-span-mean-v1-proposed",
+  "status": "REVIEW ONLY; not approved for model execution or fitting",
+  "execution_enabled": false,
+  "adapter_commit": "e24d3404332c42ff776b2de40d82075523db8094",
+  "behavioural_validator_commit": "82cdbcd3e8849fe531beae02b1506518c1bda168",
+  "legacy_suite_unchanged": {
+    "path": "../runs/behavioural-suite-v2",
+    "family_count": 40,
+    "families_sha256": "7fe977492a3e7436404d14717a5afb5fbfcaf37819b9130bf6dadfbb5428d419",
+    "heldout_sha256": "1d6355daeaca0994440e256d6754f1d30ff31ce9ecfa014ad1915bfa42473669"
+  },
+  "question": "Does a rank-one span-mean subspace carry transferable report negation across findings in fixed T5 checkpoints?",
+  "family_splits": {
+    "fit": [
+      "negation-01",
+      "negation-02",
+      "negation-03",
+      "negation-04"
+    ],
+    "selection": [
+      "negation-05",
+      "negation-06",
+      "negation-07"
+    ],
+    "heldout": [
+      "negation-08",
+      "negation-09",
+      "negation-10"
+    ]
+  },
+  "fit_selection_findings": [
+    "effusion",
+    "pneumothorax"
+  ],
+  "heldout_recipient_finding": "atelectasis",
+  "finding_terms": {
+    "effusion": "pleural effusion",
+    "pneumothorax": "pneumothorax",
+    "atelectasis": "atelectasis"
+  },
+  "finding_holdout_scope": "Absent from local basis fitting, selection, screening and their donors/candidates; not certified absent from LM pretraining or report fine-tuning.",
+  "unused_existing_finding": "focal opacity; its original behavioural variants remain unused",
+  "models": {
+    "frozen": {
+      "base_revision": "0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab",
+      "weights_sha256": null
+    },
+    "lora_merged_copy": {
+      "base_revision": "0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab",
+      "adapter_snapshot_sha256": null,
+      "merged_weights_sha256": null,
+      "snapshot_rule": "One coordinator-approved immutable completed checkpoint from existing dev-loss selection; never choose using this experiment",
+      "merge_rule": "Fresh separate CPU base+adapter copy; merge_and_unload(safe_merge=True); assert plain T5; freeze/eval; never touch a training model",
+      "merge_equivalence_atol": 1e-05,
+      "merge_equivalence_rtol": 1e-05,
+      "equivalence_reference": "Ordinary wrapped PEFT forward with identical teacher-forcing masks and manual masked sum/gather; comparison is outside the plain-T5 adapter."
+    }
+  },
+  "input_contract": {
+    "prompt": "Rewrite this radiology report in plain English. Preserve all findings, negation and uncertainty:\n",
+    "tokenizer_revision": "0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab",
+    "tokenizer_files_sha256": null,
+    "site": "encoder.block.3",
+    "site_kind": "block hidden-state output before subsequent blocks/final encoder norm",
+    "site_selection": "fixed in advance; no layer sweep",
+    "model_d_model": 512,
+    "model_encoder_blocks": 8,
+    "rank": 1,
+    "dtype": "float32",
+    "max_source_tokens": 64,
+    "max_candidate_tokens": 64,
+    "truncation": "forbidden; halt for review if a complete source/candidate does not fit",
+    "candidate_tokenization": "add_special_tokens=False; append exactly one configured EOS; explicit target mask; count includes EOS",
+    "source_tokenization": "fixed prompt+source with exactly one configured source EOS; offsets required; prompt/EOS/padding ineligible",
+    "span_mapping": "source_char_span is half-open; require whole-token boundary alignment after prompt offset; no silent expansion or inferred token indices",
+    "token_span_status": "null until separately approved tokenizer preflight; none guessed here"
+  },
+  "screened_pilot": {
+    "families": [
+      "negation-01"
+    ],
+    "recipient_ids": [
+      "fit/negation-01/effusion/absent",
+      "fit/negation-01/effusion/present",
+      "fit/negation-01/pneumothorax/absent",
+      "fit/negation-01/pneumothorax/present"
+    ],
+    "source_count": 4,
+    "paired_input_contrasts": 2,
+    "basis": "fixed coordinate e0; not learned or selected",
+    "self_patch_conditions": 4,
+    "cross_finding_donor_conditions": 8,
+    "adapter_compare_calls_per_checkpoint": 12,
+    "current_adapter_forward_budget_per_checkpoint": {
+      "encoder_calls": 36,
+      "decoder_calls": 48
+    },
+    "order": "frozen first, approved merged LoRA copy second; coordinator schedules after training contention is cleared",
+    "mechanical_gate": "all spans/masks valid; immutable parameters/checkpoints; self logits atol=rtol=1e-6 and absolute margin effect<=1e-6; explicit EOS/counts and merge equivalence pass",
+    "input_gate": "both paired input contrasts M(present)-M(absent)>1e-6 for each checkpoint; show all values; no exclusions or metric/wording changes",
+    "intervention_gate": "no positive patch-effect requirement for the arbitrary coordinate basis",
+    "failure_action": "stop and return all cases/scores for protocol review; do not fit, relax gates, change candidates or inspect heldout",
+    "input_gate_interpretation": "Numerical/mechanical feasibility only: two tiny positive contrasts on one easy family are not evidence of robust negation, a usable polarity readout, a localisable subspace, clinical quality or statistical significance."
+  },
+  "score_contract": {
+    "candidate_margin": "M=sum logP(recipient positive candidate)-sum logP(recipient negative candidate); include declared EOS, exclude mask padding; no length normalisation",
+    "paired_input_effect": "I(f,c)=M(x_present)-M(x_absent)",
+    "primary_intervention_contrast": "P(f,c,r,d)=M(x_r patched from donor_present)-M(x_r patched from donor_absent); same recipient/candidates, cross-finding donor concept d fixed",
+    "raw_effects": "retain M(patched)-M(baseline) for same- and cross-polarity cases, plus self effects",
+    "aggregation": "average paired donor-polarity effects within each recipient polarity/finding, then give each family equal weight; show all family values and raw candidate sums/counts/EOS",
+    "checkpoint_comparison": "paired LoRA-minus-frozen I and P on identical cases; descriptive single-checkpoint comparison",
+    "recovery_ratios": "none",
+    "intervals": "none; three heldout families are too small for a population/generalisation claim"
+  },
+  "controls": {
+    "self_patch": "same source and identical span; same evaluated basis",
+    "same_polarity": "other finding, same family/assertion; do not assume exact zero because source content changes",
+    "random_subspace": {
+      "rank": 1,
+      "seeds": [
+        3711,
+        3712,
+        3713
+      ],
+      "rule": "independent fixed Gaussian direction normalised to unit norm, no data-based choice; report each, not a p-value",
+      "generator": "torch CPU Generator.manual_seed(seed); randn(512,1,dtype=float32); divide by norm; do not execute until approved"
+    },
+    "permuted_label_fit": {
+      "permutation_seed": 3720,
+      "fit_labels": [
+        {
+          "donor_id": "fit/negation-01/effusion/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "absent"
+        },
+        {
+          "donor_id": "fit/negation-01/effusion/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-01/pneumothorax/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "absent"
+        },
+        {
+          "donor_id": "fit/negation-01/pneumothorax/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-02/effusion/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-02/effusion/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-02/pneumothorax/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-02/pneumothorax/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "absent"
+        },
+        {
+          "donor_id": "fit/negation-03/effusion/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "absent"
+        },
+        {
+          "donor_id": "fit/negation-03/effusion/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-03/pneumothorax/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "absent"
+        },
+        {
+          "donor_id": "fit/negation-03/pneumothorax/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-04/effusion/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "present"
+        },
+        {
+          "donor_id": "fit/negation-04/effusion/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "absent"
+        },
+        {
+          "donor_id": "fit/negation-04/pneumothorax/absent",
+          "true_assertion": "absent",
+          "permuted_fit_assertion": "absent"
+        },
+        {
+          "donor_id": "fit/negation-04/pneumothorax/present",
+          "true_assertion": "present",
+          "permuted_fit_assertion": "absent"
+        }
+      ],
+      "rule": "same init/optimizer/order as true fit; shuffle donor labels once over fit sources, keep mapping for repeated donors; use true labels for all reported evaluation contrasts; match true-fit selected step"
+    }
+  },
+  "future_fitting_proposal_not_implemented": {
+    "enabled": false,
+    "basis_parameterization": "rank-one Q=w/||w||; fixed initial Gaussian seed3710; guard ||w||>1e-8",
+    "site": "encoder.block.3",
+    "rank": 1,
+    "optimizer": "Adam on w only",
+    "learning_rate": 0.01,
+    "max_updates": 64,
+    "order_seed": 3730,
+    "order": "two seeded permutations of the32 fit intervention cases; one case/update",
+    "selection_snapshots": [
+      32,
+      64
+    ],
+    "selection_rule": "greater equal-family mean primary P on selection only; ties within1e-6 choose32; no other tuning",
+    "loss": "softplus(-s_donor*M_patched), with s_present=+1,s_absent=-1; label-balanced fit cases; no length normalisation",
+    "differentiability": "separate module under enable_grad; frozen model weights/eval but graph retained through Q patch, downstream encoder and decoder; normal detached donor tensors via no_grad, never inference-mode caches; do not call inference_mode scoring/shift helpers",
+    "required_first_tests": [
+      "finite-difference and nonzero w-gradient on tiny random T5",
+      "only w changes; model parameters unchanged",
+      "Q unit norm and self shift identity",
+      "same padding/EOS/sum semantics",
+      "hook cleanup on forward/backward exceptions"
+    ],
+    "gate": "Parent approval of protocol including proposed substantive gate; mechanical pilot AND approved substantive fit-only screen; separate differentiable-path review; coordinator compute scheduling before any fitting.",
+    "case_order": [
+      "fit/negation-03/effusion/absent<-pneumothorax/absent",
+      "fit/negation-01/pneumothorax/absent<-effusion/absent",
+      "fit/negation-03/pneumothorax/present<-effusion/present",
+      "fit/negation-04/pneumothorax/present<-effusion/present",
+      "fit/negation-03/pneumothorax/absent<-effusion/absent",
+      "fit/negation-04/pneumothorax/absent<-effusion/absent",
+      "fit/negation-04/effusion/present<-pneumothorax/absent",
+      "fit/negation-02/pneumothorax/present<-effusion/absent",
+      "fit/negation-02/pneumothorax/present<-effusion/present",
+      "fit/negation-03/pneumothorax/absent<-effusion/present",
+      "fit/negation-01/effusion/present<-pneumothorax/absent",
+      "fit/negation-02/effusion/absent<-pneumothorax/absent",
+      "fit/negation-04/effusion/absent<-pneumothorax/present",
+      "fit/negation-04/effusion/present<-pneumothorax/present",
+      "fit/negation-04/pneumothorax/absent<-effusion/present",
+      "fit/negation-01/effusion/absent<-pneumothorax/present",
+      "fit/negation-04/pneumothorax/present<-effusion/absent",
+      "fit/negation-01/effusion/present<-pneumothorax/present",
+      "fit/negation-01/effusion/absent<-pneumothorax/absent",
+      "fit/negation-03/pneumothorax/present<-effusion/absent",
+      "fit/negation-04/effusion/absent<-pneumothorax/absent",
+      "fit/negation-02/effusion/present<-pneumothorax/present",
+      "fit/negation-03/effusion/present<-pneumothorax/absent",
+      "fit/negation-03/effusion/absent<-pneumothorax/present",
+      "fit/negation-02/effusion/present<-pneumothorax/absent",
+      "fit/negation-02/effusion/absent<-pneumothorax/present",
+      "fit/negation-01/pneumothorax/present<-effusion/absent",
+      "fit/negation-02/pneumothorax/absent<-effusion/absent",
+      "fit/negation-01/pneumothorax/absent<-effusion/present",
+      "fit/negation-01/pneumothorax/present<-effusion/present",
+      "fit/negation-02/pneumothorax/absent<-effusion/present",
+      "fit/negation-03/effusion/present<-pneumothorax/present",
+      "fit/negation-03/effusion/present<-pneumothorax/absent",
+      "fit/negation-01/effusion/absent<-pneumothorax/present",
+      "fit/negation-01/effusion/absent<-pneumothorax/absent",
+      "fit/negation-04/pneumothorax/absent<-effusion/absent",
+      "fit/negation-02/effusion/absent<-pneumothorax/absent",
+      "fit/negation-01/effusion/present<-pneumothorax/present",
+      "fit/negation-03/pneumothorax/absent<-effusion/present",
+      "fit/negation-04/pneumothorax/absent<-effusion/present",
+      "fit/negation-03/effusion/present<-pneumothorax/present",
+      "fit/negation-04/effusion/absent<-pneumothorax/present",
+      "fit/negation-02/pneumothorax/present<-effusion/present",
+      "fit/negation-03/pneumothorax/present<-effusion/present",
+      "fit/negation-02/pneumothorax/absent<-effusion/present",
+      "fit/negation-02/effusion/absent<-pneumothorax/present",
+      "fit/negation-01/pneumothorax/present<-effusion/present",
+      "fit/negation-04/effusion/absent<-pneumothorax/absent",
+      "fit/negation-03/effusion/absent<-pneumothorax/absent",
+      "fit/negation-01/effusion/present<-pneumothorax/absent",
+      "fit/negation-03/pneumothorax/absent<-effusion/absent",
+      "fit/negation-03/pneumothorax/present<-effusion/absent",
+      "fit/negation-02/effusion/present<-pneumothorax/absent",
+      "fit/negation-04/effusion/present<-pneumothorax/absent",
+      "fit/negation-03/effusion/absent<-pneumothorax/present",
+      "fit/negation-04/effusion/present<-pneumothorax/present",
+      "fit/negation-02/effusion/present<-pneumothorax/present",
+      "fit/negation-02/pneumothorax/absent<-effusion/absent",
+      "fit/negation-02/pneumothorax/present<-effusion/absent",
+      "fit/negation-01/pneumothorax/present<-effusion/absent",
+      "fit/negation-01/pneumothorax/absent<-effusion/present",
+      "fit/negation-04/pneumothorax/present<-effusion/present",
+      "fit/negation-01/pneumothorax/absent<-effusion/absent",
+      "fit/negation-04/pneumothorax/present<-effusion/absent"
+    ],
+    "adam_betas": [
+      0.9,
+      0.999
+    ],
+    "adam_eps": 1e-08,
+    "weight_decay": 0.0
+  },
+  "sources": [
+    {
+      "id": "fit/negation-01/effusion/absent",
+      "split": "fit",
+      "family_id": "negation-01",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "No pleural effusion.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        19
+      ],
+      "source_span_text": "No pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-01/effusion/present",
+      "split": "fit",
+      "family_id": "negation-01",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pleural effusion is present.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        27
+      ],
+      "source_span_text": "Pleural effusion is present",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-01/pneumothorax/absent",
+      "split": "fit",
+      "family_id": "negation-01",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "No pneumothorax.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        15
+      ],
+      "source_span_text": "No pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-01/pneumothorax/present",
+      "split": "fit",
+      "family_id": "negation-01",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pneumothorax is present.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        23
+      ],
+      "source_span_text": "Pneumothorax is present",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-02/effusion/absent",
+      "split": "fit",
+      "family_id": "negation-02",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is no evidence of pleural effusion.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        40
+      ],
+      "source_span_text": "There is no evidence of pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-02/effusion/present",
+      "split": "fit",
+      "family_id": "negation-02",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is evidence of pleural effusion.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        37
+      ],
+      "source_span_text": "There is evidence of pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-02/pneumothorax/absent",
+      "split": "fit",
+      "family_id": "negation-02",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is no evidence of pneumothorax.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        36
+      ],
+      "source_span_text": "There is no evidence of pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-02/pneumothorax/present",
+      "split": "fit",
+      "family_id": "negation-02",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is evidence of pneumothorax.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        33
+      ],
+      "source_span_text": "There is evidence of pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-03/effusion/absent",
+      "split": "fit",
+      "family_id": "negation-03",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pleural effusion is absent.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        26
+      ],
+      "source_span_text": "Pleural effusion is absent",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-03/effusion/present",
+      "split": "fit",
+      "family_id": "negation-03",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pleural effusion is visible.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        27
+      ],
+      "source_span_text": "Pleural effusion is visible",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-03/pneumothorax/absent",
+      "split": "fit",
+      "family_id": "negation-03",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pneumothorax is absent.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        22
+      ],
+      "source_span_text": "Pneumothorax is absent",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-03/pneumothorax/present",
+      "split": "fit",
+      "family_id": "negation-03",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pneumothorax is visible.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        23
+      ],
+      "source_span_text": "Pneumothorax is visible",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-04/effusion/absent",
+      "split": "fit",
+      "family_id": "negation-04",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "The examination is negative for pleural effusion.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        48
+      ],
+      "source_span_text": "The examination is negative for pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-04/effusion/present",
+      "split": "fit",
+      "family_id": "negation-04",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "The examination is positive for pleural effusion.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        48
+      ],
+      "source_span_text": "The examination is positive for pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-04/pneumothorax/absent",
+      "split": "fit",
+      "family_id": "negation-04",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "The examination is negative for pneumothorax.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        44
+      ],
+      "source_span_text": "The examination is negative for pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "fit/negation-04/pneumothorax/present",
+      "split": "fit",
+      "family_id": "negation-04",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "The examination is positive for pneumothorax.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        44
+      ],
+      "source_span_text": "The examination is positive for pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-05/effusion/absent",
+      "split": "selection",
+      "family_id": "negation-05",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Imaging shows no pleural effusion.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        33
+      ],
+      "source_span_text": "Imaging shows no pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-05/effusion/present",
+      "split": "selection",
+      "family_id": "negation-05",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Imaging shows pleural effusion.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        30
+      ],
+      "source_span_text": "Imaging shows pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-05/pneumothorax/absent",
+      "split": "selection",
+      "family_id": "negation-05",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Imaging shows no pneumothorax.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        29
+      ],
+      "source_span_text": "Imaging shows no pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-05/pneumothorax/present",
+      "split": "selection",
+      "family_id": "negation-05",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Imaging shows pneumothorax.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        26
+      ],
+      "source_span_text": "Imaging shows pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-06/effusion/absent",
+      "split": "selection",
+      "family_id": "negation-06",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "No pleural effusion is identified on this examination.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        53
+      ],
+      "source_span_text": "No pleural effusion is identified on this examination",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-06/effusion/present",
+      "split": "selection",
+      "family_id": "negation-06",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pleural effusion is identified on this examination.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        50
+      ],
+      "source_span_text": "Pleural effusion is identified on this examination",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-06/pneumothorax/absent",
+      "split": "selection",
+      "family_id": "negation-06",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "No pneumothorax is identified on this examination.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        49
+      ],
+      "source_span_text": "No pneumothorax is identified on this examination",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-06/pneumothorax/present",
+      "split": "selection",
+      "family_id": "negation-06",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "Pneumothorax is identified on this examination.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        46
+      ],
+      "source_span_text": "Pneumothorax is identified on this examination",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-07/effusion/absent",
+      "split": "selection",
+      "family_id": "negation-07",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is neither pleural effusion nor cardiac enlargement.",
+      "assertion": "absent",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "absent"
+      },
+      "source_char_span": [
+        0,
+        33
+      ],
+      "source_span_text": "There is neither pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "No cardiac enlargement is present. Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No cardiac enlargement is present. No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-07/effusion/present",
+      "split": "selection",
+      "family_id": "negation-07",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is pleural effusion but no cardiac enlargement.",
+      "assertion": "present",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "absent"
+      },
+      "source_char_span": [
+        0,
+        25
+      ],
+      "source_span_text": "There is pleural effusion",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "No cardiac enlargement is present. Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No cardiac enlargement is present. No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-07/pneumothorax/absent",
+      "split": "selection",
+      "family_id": "negation-07",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is neither pneumothorax nor cardiac enlargement.",
+      "assertion": "absent",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "absent"
+      },
+      "source_char_span": [
+        0,
+        29
+      ],
+      "source_span_text": "There is neither pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "No cardiac enlargement is present. Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No cardiac enlargement is present. No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "selection/negation-07/pneumothorax/present",
+      "split": "selection",
+      "family_id": "negation-07",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "recipient",
+        "donor"
+      ],
+      "source": "There is pneumothorax but no cardiac enlargement.",
+      "assertion": "present",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "absent"
+      },
+      "source_char_span": [
+        0,
+        21
+      ],
+      "source_span_text": "There is pneumothorax",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "No cardiac enlargement is present. Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No cardiac enlargement is present. No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-08/effusion/absent",
+      "split": "heldout",
+      "family_id": "negation-08",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "donor"
+      ],
+      "source": "Without evidence of pleural effusion on the current image.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        57
+      ],
+      "source_span_text": "Without evidence of pleural effusion on the current image",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-08/effusion/present",
+      "split": "heldout",
+      "family_id": "negation-08",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "donor"
+      ],
+      "source": "With evidence of pleural effusion on the current image.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        54
+      ],
+      "source_span_text": "With evidence of pleural effusion on the current image",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-08/pneumothorax/absent",
+      "split": "heldout",
+      "family_id": "negation-08",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "donor"
+      ],
+      "source": "Without evidence of pneumothorax on the current image.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        53
+      ],
+      "source_span_text": "Without evidence of pneumothorax on the current image",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-08/pneumothorax/present",
+      "split": "heldout",
+      "family_id": "negation-08",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "donor"
+      ],
+      "source": "With evidence of pneumothorax on the current image.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        50
+      ],
+      "source_span_text": "With evidence of pneumothorax on the current image",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/absent",
+      "split": "heldout",
+      "family_id": "negation-08",
+      "finding_id": "atelectasis",
+      "finding": "atelectasis",
+      "roles": [
+        "recipient"
+      ],
+      "source": "Without evidence of atelectasis on the current image.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        52
+      ],
+      "source_span_text": "Without evidence of atelectasis on the current image",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/present",
+      "split": "heldout",
+      "family_id": "negation-08",
+      "finding_id": "atelectasis",
+      "finding": "atelectasis",
+      "roles": [
+        "recipient"
+      ],
+      "source": "With evidence of atelectasis on the current image.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        49
+      ],
+      "source_span_text": "With evidence of atelectasis on the current image",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-09/effusion/absent",
+      "split": "heldout",
+      "family_id": "negation-09",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "donor"
+      ],
+      "source": "Cardiac enlargement is present, but pleural effusion is not seen.",
+      "assertion": "absent",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "present"
+      },
+      "source_char_span": [
+        36,
+        64
+      ],
+      "source_span_text": "pleural effusion is not seen",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Cardiac enlargement is present. Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "Cardiac enlargement is present. No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-09/effusion/present",
+      "split": "heldout",
+      "family_id": "negation-09",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "donor"
+      ],
+      "source": "Cardiac enlargement is present, and pleural effusion is seen.",
+      "assertion": "present",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "present"
+      },
+      "source_char_span": [
+        36,
+        60
+      ],
+      "source_span_text": "pleural effusion is seen",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Cardiac enlargement is present. Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "Cardiac enlargement is present. No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-09/pneumothorax/absent",
+      "split": "heldout",
+      "family_id": "negation-09",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "donor"
+      ],
+      "source": "Cardiac enlargement is present, but pneumothorax is not seen.",
+      "assertion": "absent",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "present"
+      },
+      "source_char_span": [
+        36,
+        60
+      ],
+      "source_span_text": "pneumothorax is not seen",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Cardiac enlargement is present. Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "Cardiac enlargement is present. No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-09/pneumothorax/present",
+      "split": "heldout",
+      "family_id": "negation-09",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "donor"
+      ],
+      "source": "Cardiac enlargement is present, and pneumothorax is seen.",
+      "assertion": "present",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "present"
+      },
+      "source_char_span": [
+        36,
+        56
+      ],
+      "source_span_text": "pneumothorax is seen",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Cardiac enlargement is present. Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "Cardiac enlargement is present. No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/absent",
+      "split": "heldout",
+      "family_id": "negation-09",
+      "finding_id": "atelectasis",
+      "finding": "atelectasis",
+      "roles": [
+        "recipient"
+      ],
+      "source": "Cardiac enlargement is present, but atelectasis is not seen.",
+      "assertion": "absent",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "present"
+      },
+      "source_char_span": [
+        36,
+        59
+      ],
+      "source_span_text": "atelectasis is not seen",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Cardiac enlargement is present. Atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "Cardiac enlargement is present. No atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/present",
+      "split": "heldout",
+      "family_id": "negation-09",
+      "finding_id": "atelectasis",
+      "finding": "atelectasis",
+      "roles": [
+        "recipient"
+      ],
+      "source": "Cardiac enlargement is present, and atelectasis is seen.",
+      "assertion": "present",
+      "secondary_assertion": {
+        "concept": "cardiac enlargement",
+        "assertion": "present"
+      },
+      "source_char_span": [
+        36,
+        55
+      ],
+      "source_span_text": "atelectasis is seen",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Cardiac enlargement is present. Atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "Cardiac enlargement is present. No atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-10/effusion/absent",
+      "split": "heldout",
+      "family_id": "negation-10",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "donor"
+      ],
+      "source": "Pleural effusion: not detected.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        30
+      ],
+      "source_span_text": "Pleural effusion: not detected",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-10/effusion/present",
+      "split": "heldout",
+      "family_id": "negation-10",
+      "finding_id": "effusion",
+      "finding": "pleural effusion",
+      "roles": [
+        "donor"
+      ],
+      "source": "Pleural effusion: detected.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        26
+      ],
+      "source_span_text": "Pleural effusion: detected",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pleural effusion is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-10/pneumothorax/absent",
+      "split": "heldout",
+      "family_id": "negation-10",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "donor"
+      ],
+      "source": "Pneumothorax: not detected.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        26
+      ],
+      "source_span_text": "Pneumothorax: not detected",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-10/pneumothorax/present",
+      "split": "heldout",
+      "family_id": "negation-10",
+      "finding_id": "pneumothorax",
+      "finding": "pneumothorax",
+      "roles": [
+        "donor"
+      ],
+      "source": "Pneumothorax: detected.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        22
+      ],
+      "source_span_text": "Pneumothorax: detected",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No pneumothorax is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/absent",
+      "split": "heldout",
+      "family_id": "negation-10",
+      "finding_id": "atelectasis",
+      "finding": "atelectasis",
+      "roles": [
+        "recipient"
+      ],
+      "source": "Atelectasis: not detected.",
+      "assertion": "absent",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        25
+      ],
+      "source_span_text": "Atelectasis: not detected",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/present",
+      "split": "heldout",
+      "family_id": "negation-10",
+      "finding_id": "atelectasis",
+      "finding": "atelectasis",
+      "roles": [
+        "recipient"
+      ],
+      "source": "Atelectasis: detected.",
+      "assertion": "present",
+      "secondary_assertion": null,
+      "source_char_span": [
+        0,
+        21
+      ],
+      "source_span_text": "Atelectasis: detected",
+      "span_offsets_relative_to": "source text only; future token offsets add the fixed prompt prefix",
+      "token_span": null,
+      "token_ids_sha256": null,
+      "attention_mask_sha256": null,
+      "candidates": {
+        "positive": {
+          "text": "Atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        },
+        "negative": {
+          "text": "No atelectasis is present.",
+          "eos_included": true,
+          "token_count": null,
+          "token_ids_sha256": null,
+          "target_mask_sha256": null
+        }
+      },
+      "label_status": "author_proposed; not clinical expert approval",
+      "human_review": {
+        "label_approved": null,
+        "reviewer": null,
+        "notes": null
+      },
+      "source_kind": "synthetic_template; no patient records"
+    }
+  ],
+  "intervention_cases": [
+    {
+      "id": "fit/negation-01/effusion/absent<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/effusion/absent",
+      "donor_id": "fit/negation-01/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-01/effusion/absent"
+    },
+    {
+      "id": "fit/negation-01/effusion/absent<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/effusion/absent",
+      "donor_id": "fit/negation-01/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-01/effusion/absent"
+    },
+    {
+      "id": "fit/negation-01/effusion/present<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/effusion/present",
+      "donor_id": "fit/negation-01/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-01/effusion/present"
+    },
+    {
+      "id": "fit/negation-01/effusion/present<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/effusion/present",
+      "donor_id": "fit/negation-01/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-01/effusion/present"
+    },
+    {
+      "id": "fit/negation-01/pneumothorax/absent<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/pneumothorax/absent",
+      "donor_id": "fit/negation-01/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-01/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-01/pneumothorax/absent<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/pneumothorax/absent",
+      "donor_id": "fit/negation-01/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-01/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-01/pneumothorax/present<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/pneumothorax/present",
+      "donor_id": "fit/negation-01/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-01/pneumothorax/present"
+    },
+    {
+      "id": "fit/negation-01/pneumothorax/present<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-01/pneumothorax/present",
+      "donor_id": "fit/negation-01/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-01/pneumothorax/present"
+    },
+    {
+      "id": "fit/negation-02/effusion/absent<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/effusion/absent",
+      "donor_id": "fit/negation-02/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-02/effusion/absent"
+    },
+    {
+      "id": "fit/negation-02/effusion/absent<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/effusion/absent",
+      "donor_id": "fit/negation-02/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-02/effusion/absent"
+    },
+    {
+      "id": "fit/negation-02/effusion/present<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/effusion/present",
+      "donor_id": "fit/negation-02/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-02/effusion/present"
+    },
+    {
+      "id": "fit/negation-02/effusion/present<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/effusion/present",
+      "donor_id": "fit/negation-02/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-02/effusion/present"
+    },
+    {
+      "id": "fit/negation-02/pneumothorax/absent<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/pneumothorax/absent",
+      "donor_id": "fit/negation-02/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-02/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-02/pneumothorax/absent<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/pneumothorax/absent",
+      "donor_id": "fit/negation-02/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-02/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-02/pneumothorax/present<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/pneumothorax/present",
+      "donor_id": "fit/negation-02/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-02/pneumothorax/present"
+    },
+    {
+      "id": "fit/negation-02/pneumothorax/present<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-02/pneumothorax/present",
+      "donor_id": "fit/negation-02/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-02/pneumothorax/present"
+    },
+    {
+      "id": "fit/negation-03/effusion/absent<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/effusion/absent",
+      "donor_id": "fit/negation-03/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-03/effusion/absent"
+    },
+    {
+      "id": "fit/negation-03/effusion/absent<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/effusion/absent",
+      "donor_id": "fit/negation-03/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-03/effusion/absent"
+    },
+    {
+      "id": "fit/negation-03/effusion/present<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/effusion/present",
+      "donor_id": "fit/negation-03/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-03/effusion/present"
+    },
+    {
+      "id": "fit/negation-03/effusion/present<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/effusion/present",
+      "donor_id": "fit/negation-03/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-03/effusion/present"
+    },
+    {
+      "id": "fit/negation-03/pneumothorax/absent<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/pneumothorax/absent",
+      "donor_id": "fit/negation-03/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-03/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-03/pneumothorax/absent<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/pneumothorax/absent",
+      "donor_id": "fit/negation-03/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-03/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-03/pneumothorax/present<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/pneumothorax/present",
+      "donor_id": "fit/negation-03/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-03/pneumothorax/present"
+    },
+    {
+      "id": "fit/negation-03/pneumothorax/present<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-03/pneumothorax/present",
+      "donor_id": "fit/negation-03/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-03/pneumothorax/present"
+    },
+    {
+      "id": "fit/negation-04/effusion/absent<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/effusion/absent",
+      "donor_id": "fit/negation-04/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-04/effusion/absent"
+    },
+    {
+      "id": "fit/negation-04/effusion/absent<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/effusion/absent",
+      "donor_id": "fit/negation-04/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-04/effusion/absent"
+    },
+    {
+      "id": "fit/negation-04/effusion/present<-pneumothorax/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/effusion/present",
+      "donor_id": "fit/negation-04/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-04/effusion/present"
+    },
+    {
+      "id": "fit/negation-04/effusion/present<-pneumothorax/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/effusion/present",
+      "donor_id": "fit/negation-04/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-04/effusion/present"
+    },
+    {
+      "id": "fit/negation-04/pneumothorax/absent<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/pneumothorax/absent",
+      "donor_id": "fit/negation-04/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-04/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-04/pneumothorax/absent<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/pneumothorax/absent",
+      "donor_id": "fit/negation-04/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-04/pneumothorax/absent"
+    },
+    {
+      "id": "fit/negation-04/pneumothorax/present<-effusion/absent",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/pneumothorax/present",
+      "donor_id": "fit/negation-04/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "fit/negation-04/pneumothorax/present"
+    },
+    {
+      "id": "fit/negation-04/pneumothorax/present<-effusion/present",
+      "split": "fit",
+      "recipient_id": "fit/negation-04/pneumothorax/present",
+      "donor_id": "fit/negation-04/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "fit/negation-04/pneumothorax/present"
+    },
+    {
+      "id": "selection/negation-05/effusion/absent<-pneumothorax/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/effusion/absent",
+      "donor_id": "selection/negation-05/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-05/effusion/absent"
+    },
+    {
+      "id": "selection/negation-05/effusion/absent<-pneumothorax/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/effusion/absent",
+      "donor_id": "selection/negation-05/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-05/effusion/absent"
+    },
+    {
+      "id": "selection/negation-05/effusion/present<-pneumothorax/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/effusion/present",
+      "donor_id": "selection/negation-05/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-05/effusion/present"
+    },
+    {
+      "id": "selection/negation-05/effusion/present<-pneumothorax/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/effusion/present",
+      "donor_id": "selection/negation-05/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-05/effusion/present"
+    },
+    {
+      "id": "selection/negation-05/pneumothorax/absent<-effusion/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/pneumothorax/absent",
+      "donor_id": "selection/negation-05/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-05/pneumothorax/absent"
+    },
+    {
+      "id": "selection/negation-05/pneumothorax/absent<-effusion/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/pneumothorax/absent",
+      "donor_id": "selection/negation-05/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-05/pneumothorax/absent"
+    },
+    {
+      "id": "selection/negation-05/pneumothorax/present<-effusion/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/pneumothorax/present",
+      "donor_id": "selection/negation-05/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-05/pneumothorax/present"
+    },
+    {
+      "id": "selection/negation-05/pneumothorax/present<-effusion/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-05/pneumothorax/present",
+      "donor_id": "selection/negation-05/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-05/pneumothorax/present"
+    },
+    {
+      "id": "selection/negation-06/effusion/absent<-pneumothorax/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/effusion/absent",
+      "donor_id": "selection/negation-06/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-06/effusion/absent"
+    },
+    {
+      "id": "selection/negation-06/effusion/absent<-pneumothorax/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/effusion/absent",
+      "donor_id": "selection/negation-06/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-06/effusion/absent"
+    },
+    {
+      "id": "selection/negation-06/effusion/present<-pneumothorax/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/effusion/present",
+      "donor_id": "selection/negation-06/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-06/effusion/present"
+    },
+    {
+      "id": "selection/negation-06/effusion/present<-pneumothorax/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/effusion/present",
+      "donor_id": "selection/negation-06/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-06/effusion/present"
+    },
+    {
+      "id": "selection/negation-06/pneumothorax/absent<-effusion/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/pneumothorax/absent",
+      "donor_id": "selection/negation-06/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-06/pneumothorax/absent"
+    },
+    {
+      "id": "selection/negation-06/pneumothorax/absent<-effusion/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/pneumothorax/absent",
+      "donor_id": "selection/negation-06/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-06/pneumothorax/absent"
+    },
+    {
+      "id": "selection/negation-06/pneumothorax/present<-effusion/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/pneumothorax/present",
+      "donor_id": "selection/negation-06/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-06/pneumothorax/present"
+    },
+    {
+      "id": "selection/negation-06/pneumothorax/present<-effusion/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-06/pneumothorax/present",
+      "donor_id": "selection/negation-06/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-06/pneumothorax/present"
+    },
+    {
+      "id": "selection/negation-07/effusion/absent<-pneumothorax/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/effusion/absent",
+      "donor_id": "selection/negation-07/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-07/effusion/absent"
+    },
+    {
+      "id": "selection/negation-07/effusion/absent<-pneumothorax/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/effusion/absent",
+      "donor_id": "selection/negation-07/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-07/effusion/absent"
+    },
+    {
+      "id": "selection/negation-07/effusion/present<-pneumothorax/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/effusion/present",
+      "donor_id": "selection/negation-07/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-07/effusion/present"
+    },
+    {
+      "id": "selection/negation-07/effusion/present<-pneumothorax/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/effusion/present",
+      "donor_id": "selection/negation-07/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-07/effusion/present"
+    },
+    {
+      "id": "selection/negation-07/pneumothorax/absent<-effusion/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/pneumothorax/absent",
+      "donor_id": "selection/negation-07/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-07/pneumothorax/absent"
+    },
+    {
+      "id": "selection/negation-07/pneumothorax/absent<-effusion/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/pneumothorax/absent",
+      "donor_id": "selection/negation-07/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-07/pneumothorax/absent"
+    },
+    {
+      "id": "selection/negation-07/pneumothorax/present<-effusion/absent",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/pneumothorax/present",
+      "donor_id": "selection/negation-07/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "selection/negation-07/pneumothorax/present"
+    },
+    {
+      "id": "selection/negation-07/pneumothorax/present<-effusion/present",
+      "split": "selection",
+      "recipient_id": "selection/negation-07/pneumothorax/present",
+      "donor_id": "selection/negation-07/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "selection/negation-07/pneumothorax/present"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/absent<-effusion/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/absent",
+      "donor_id": "heldout/negation-08/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/absent<-effusion/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/absent",
+      "donor_id": "heldout/negation-08/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/absent<-pneumothorax/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/absent",
+      "donor_id": "heldout/negation-08/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/absent<-pneumothorax/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/absent",
+      "donor_id": "heldout/negation-08/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/present<-effusion/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/present",
+      "donor_id": "heldout/negation-08/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/present<-effusion/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/present",
+      "donor_id": "heldout/negation-08/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/present<-pneumothorax/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/present",
+      "donor_id": "heldout/negation-08/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-08/atelectasis/present<-pneumothorax/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-08/atelectasis/present",
+      "donor_id": "heldout/negation-08/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-08/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/absent<-effusion/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/absent",
+      "donor_id": "heldout/negation-09/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/absent<-effusion/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/absent",
+      "donor_id": "heldout/negation-09/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/absent<-pneumothorax/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/absent",
+      "donor_id": "heldout/negation-09/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/absent<-pneumothorax/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/absent",
+      "donor_id": "heldout/negation-09/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/present<-effusion/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/present",
+      "donor_id": "heldout/negation-09/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/present<-effusion/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/present",
+      "donor_id": "heldout/negation-09/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/present<-pneumothorax/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/present",
+      "donor_id": "heldout/negation-09/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-09/atelectasis/present<-pneumothorax/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-09/atelectasis/present",
+      "donor_id": "heldout/negation-09/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-09/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/absent<-effusion/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/absent",
+      "donor_id": "heldout/negation-10/effusion/absent",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/absent<-effusion/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/absent",
+      "donor_id": "heldout/negation-10/effusion/present",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/absent<-pneumothorax/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/absent",
+      "donor_id": "heldout/negation-10/pneumothorax/absent",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/absent<-pneumothorax/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/absent",
+      "donor_id": "heldout/negation-10/pneumothorax/present",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/absent"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/present<-effusion/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/present",
+      "donor_id": "heldout/negation-10/effusion/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/present<-effusion/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/present",
+      "donor_id": "heldout/negation-10/effusion/present",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/present<-pneumothorax/absent",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/present",
+      "donor_id": "heldout/negation-10/pneumothorax/absent",
+      "control": "cross_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/present"
+    },
+    {
+      "id": "heldout/negation-10/atelectasis/present<-pneumothorax/present",
+      "split": "heldout",
+      "recipient_id": "heldout/negation-10/atelectasis/present",
+      "donor_id": "heldout/negation-10/pneumothorax/present",
+      "control": "same_polarity",
+      "candidate_owner": "heldout/negation-10/atelectasis/present"
+    }
+  ],
+  "self_patch_cases": [
+    {
+      "recipient_id": "fit/negation-01/effusion/absent",
+      "donor_id": "fit/negation-01/effusion/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-01/effusion/present",
+      "donor_id": "fit/negation-01/effusion/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-01/pneumothorax/absent",
+      "donor_id": "fit/negation-01/pneumothorax/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-01/pneumothorax/present",
+      "donor_id": "fit/negation-01/pneumothorax/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-02/effusion/absent",
+      "donor_id": "fit/negation-02/effusion/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-02/effusion/present",
+      "donor_id": "fit/negation-02/effusion/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-02/pneumothorax/absent",
+      "donor_id": "fit/negation-02/pneumothorax/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-02/pneumothorax/present",
+      "donor_id": "fit/negation-02/pneumothorax/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-03/effusion/absent",
+      "donor_id": "fit/negation-03/effusion/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-03/effusion/present",
+      "donor_id": "fit/negation-03/effusion/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-03/pneumothorax/absent",
+      "donor_id": "fit/negation-03/pneumothorax/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-03/pneumothorax/present",
+      "donor_id": "fit/negation-03/pneumothorax/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-04/effusion/absent",
+      "donor_id": "fit/negation-04/effusion/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-04/effusion/present",
+      "donor_id": "fit/negation-04/effusion/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-04/pneumothorax/absent",
+      "donor_id": "fit/negation-04/pneumothorax/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "fit/negation-04/pneumothorax/present",
+      "donor_id": "fit/negation-04/pneumothorax/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-05/effusion/absent",
+      "donor_id": "selection/negation-05/effusion/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-05/effusion/present",
+      "donor_id": "selection/negation-05/effusion/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-05/pneumothorax/absent",
+      "donor_id": "selection/negation-05/pneumothorax/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-05/pneumothorax/present",
+      "donor_id": "selection/negation-05/pneumothorax/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-06/effusion/absent",
+      "donor_id": "selection/negation-06/effusion/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-06/effusion/present",
+      "donor_id": "selection/negation-06/effusion/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-06/pneumothorax/absent",
+      "donor_id": "selection/negation-06/pneumothorax/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-06/pneumothorax/present",
+      "donor_id": "selection/negation-06/pneumothorax/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-07/effusion/absent",
+      "donor_id": "selection/negation-07/effusion/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-07/effusion/present",
+      "donor_id": "selection/negation-07/effusion/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-07/pneumothorax/absent",
+      "donor_id": "selection/negation-07/pneumothorax/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "selection/negation-07/pneumothorax/present",
+      "donor_id": "selection/negation-07/pneumothorax/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "heldout/negation-08/atelectasis/absent",
+      "donor_id": "heldout/negation-08/atelectasis/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "heldout/negation-08/atelectasis/present",
+      "donor_id": "heldout/negation-08/atelectasis/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "heldout/negation-09/atelectasis/absent",
+      "donor_id": "heldout/negation-09/atelectasis/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "heldout/negation-09/atelectasis/present",
+      "donor_id": "heldout/negation-09/atelectasis/present",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "heldout/negation-10/atelectasis/absent",
+      "donor_id": "heldout/negation-10/atelectasis/absent",
+      "control": "self_patch"
+    },
+    {
+      "recipient_id": "heldout/negation-10/atelectasis/present",
+      "donor_id": "heldout/negation-10/atelectasis/present",
+      "control": "self_patch"
+    }
+  ],
+  "counts": {
+    "sources": 46,
+    "fit_sources": 16,
+    "selection_sources": 12,
+    "heldout_sources": 18,
+    "heldout_recipient_sources": 6,
+    "heldout_donor_only_sources": 12,
+    "fit_interventions": 32,
+    "selection_interventions": 24,
+    "heldout_interventions": 24,
+    "self_patches": 34
+  },
+  "open_before_execution": [
+    "parent approval of this entire protocol, gates and proposed labels",
+    "runtime coordinator scheduling and immutable checkpoint/hash selection",
+    "separately approved tokenizer preflight populating token spans/IDs/masks/counts/EOS and hash lock",
+    "LoRA separate-copy merge equivalence",
+    "separate differentiable-path review before any basis fitting"
+  ],
+  "official_validation": "10000 rows reserved; never opened by this protocol preparation",
+  "references": [
+    "https://aclanthology.org/2020.acl-main.442/",
+    "https://proceedings.mlr.press/v236/geiger24a.html",
+    "https://huggingface.co/docs/peft/v0.17.0/package_reference/lora"
+  ],
+  "review_revision": 2,
+  "substantive_signal_before_fitting": {
+    "status": "ADDITIONAL PROPOSAL FOR PARENT REVIEW; not approved and not run",
+    "enabled": false,
+    "panel_source_ids": [
+      "fit/negation-01/effusion/absent",
+      "fit/negation-01/effusion/present",
+      "fit/negation-01/pneumothorax/absent",
+      "fit/negation-01/pneumothorax/present",
+      "fit/negation-02/effusion/absent",
+      "fit/negation-02/effusion/present",
+      "fit/negation-02/pneumothorax/absent",
+      "fit/negation-02/pneumothorax/present",
+      "fit/negation-03/effusion/absent",
+      "fit/negation-03/effusion/present",
+      "fit/negation-03/pneumothorax/absent",
+      "fit/negation-03/pneumothorax/present",
+      "fit/negation-04/effusion/absent",
+      "fit/negation-04/effusion/present",
+      "fit/negation-04/pneumothorax/absent",
+      "fit/negation-04/pneumothorax/present"
+    ],
+    "panel_size": {
+      "sources": 16,
+      "paired_input_contrasts": 8,
+      "families": 4,
+      "findings": 2
+    },
+    "purpose": "Establish that the fixed candidate score reads source negation consistently and materially before optimising a basis against it.",
+    "proposed_pair_success": "I=M(present)-M(absent)>=ln(2) nats AND M(present)>0 AND M(absent)<0",
+    "proposed_checkpoint_gate": "at least6/8 successful pairs; at least3/4 for each finding; positive mean I within every family; require both fixed checkpoints to pass, without exclusions",
+    "practical_threshold_note": "ln(2) is a proposed twofold change in the positive/negative candidate likelihood ratio across paired inputs, not a calibrated probability, significance cutoff or literature-established effect size.",
+    "report": "All8 I values, both raw margins and positive/negative sums, lengths and EOS per pair/checkpoint; aggregate each family equally; do not hide failures.",
+    "not_required": "No positive effect from arbitrary coordinate e0 is required; an unaligned coordinate may miss distributed information.",
+    "failure_action": "Stop before fitting and return the full panel for parent review. Do not rescue the readout by searching prompts/candidates/layers, dropping a checkpoint/family/finding, relaxing gates or using selection/heldout data.",
+    "scope_limit": "Passing establishes a small development scoring task worth testing further, not that a rank-one causal mechanism exists. Specificity/generalisation versus same-polarity, random-subspace and permuted-label controls must still be evaluated later."
+  }
+}

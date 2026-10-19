@@ -1,0 +1,168 @@
+COMP3710 NEGATION SPAN-MEAN EXPERIMENT — PROPOSED, NOT EXECUTION APPROVAL
+
+One question: does a rank-one encoder subspace carry transferable report
+negation across findings in fixed frozen-base and trained-LoRA checkpoints?
+The accompanying negation_manifest.json gives every source, recipient-specific
+candidate pair, character span, donor pairing, control and permutation label.
+No model, tokenizer, merge, fitting or evaluation has run for this proposal.
+Labels remain author-proposed; parent review is not clinical expert approval.
+The original40-family suite and official10,000-row validation stay unchanged.
+
+1. Freeze the split before any scoring
+Fit: negation-01..04, pleural effusion/pneumothorax only (16 source sentences).
+Selection: negation-05..07, those same two findings (12 sentences).
+Joint heldout: negation-08..10 with recipient finding ATELECTASIS (6 sentences).
+Heldout donors use effusion/pneumothorax within those same heldout families
+(12 additional sentences), and are evaluation-only. Never use a heldout family
+or atelectasis in screening, fitting, selection, donor inputs or candidates for
+those stages. All finding variants stay with their family. Original focal-opacity
+variants are unused. Atelectasis is new to this synthetic suite, but may occur
+in LM pretraining or report fine-tuning: the holdout claim is local to this
+subspace experiment, not a claim about the model's lifetime training corpus.
+
+2. Inputs, spans and candidates
+Use the existing fixed simplification prompt, pinned tokenizer revision and
+complete untruncated strings in the manifest. Target encoder.block.3 output,
+rank1, float32, one example/call. The cached model config has8 encoder blocks
+and hidden width512; site/rank are fixed, with no search or CKA-based choice.
+
+Character spans are explicit, half-open and relative to source text. They
+cover the finding proposition including its governing negation/assertion words,
+excluding final punctuation. Family07 stops before the secondary cardiac clause;
+family09 selects the finding clause after but/and, excluding the cardiac clause.
+Future approved tokenizer preflight must add the prompt offset and establish
+whole-token boundaries. Prompt, source EOS and padding are ineligible. No span
+expansion, guessed token indices or truncation. Halt for review if a complete
+source/candidate exceeds the adapter's64-token cap or boundaries do not align.
+Token spans, IDs/mask hashes and candidate counts deliberately remain null now.
+
+For recipient finding c, candidate positive is 'C is present.' and negative is
+'No c is present.' Candidates always name the RECIPIENT, never the other donor
+finding. Family07 prefixes BOTH with 'No cardiac enlargement is present.';
+family09 prefixes BOTH with 'Cardiac enlargement is present.' This retains the
+source's secondary proposition. Tokenise candidate text without automatic
+special tokens, append exactly one configured EOS, and use an explicit target
+mask independent of token ID. Report both token counts INCLUDING EOS and their
+EOS flags. No silent length normalisation or alternate verbaliser search.
+
+3. Smallest screening pilot before any learned basis
+Use only family01's four fit sentences: two findings x absent/present. There
+are two paired input contrasts. Run frozen base first and, when available,
+the approved merged LoRA copy second. Q is the fixed coordinate vector e0;
+there is no fitting, seed search or subspace-effect success requirement.
+For each checkpoint,4 self-patches plus8 cross-finding donor patches (both
+polarity donors for each recipient) give12 adapter.compare calls. With the
+current uncached adapter that means36 encoder and48 decoder calls/checkpoint;
+this is a bounded, separately scheduled pilot, not an instruction to run now.
+
+Proposed mechanical gates: valid complete spans/masks; recorded hashes/EOS/counts;
+unchanged model parameters; self-patch logits atol=rtol=1e-6 and absolute margin
+effect<=1e-6; merged-copy equivalence below. Numerical feasibility gate ONLY: BOTH
+paired input effects I>1e-6 for EACH checkpoint. This screens a scoring task,
+not clinical quality or statistical significance; raw candidate margin signs
+need not classify both cases correctly because summed lengths/priors differ.
+Show every value. If a gate fails, STOP for parent review: no exclusions,
+wording changes, weaker thresholds, alternate sites or heldout inspection.
+
+Before fitting: a substantive task-signal gate, PROPOSED FOR REVIEW ONLY
+The1e-6 check on two easy pairs is close to the numerical identity tolerance.
+It only shows that the pipeline can produce finite, nonzero input sensitivity;
+it does not establish robust negation, a useful polarity readout, a localisable
+subspace, clinical quality or statistical significance. Do not start fitting
+merely because that mechanical pilot passes.
+
+Proposed next prerequisite: evaluate the16 existing FIT inputs only (families
+01..04 x two seen findings x absent/present), giving8 paired input contrasts.
+For a pair to pass, require I>=ln(2) nats AND M(present)>0 AND M(absent)<0.
+Require at least6/8 passing pairs, at least3/4 for EACH finding, and positive
+mean I in EVERY family, for BOTH fixed checkpoints. This tests meaningful
+sensitivity and correct candidate preferences across four constructions rather
+than a tiny effect in one construction. ln(2) denotes a proposed twofold change
+in the positive/negative candidate likelihood ratio across paired inputs, not
+a doubling of calibrated confidence, a p-value or a literature-established
+clinical threshold. These practical gates require parent approval before use.
+
+Report all pairs, including failures, raw margins/sums/lengths/EOS. If either
+checkpoint fails, stop before fitting for parent review; no posthoc exclusions,
+verbaliser/prompt/layer search, threshold changes or heldout/selection inspection.
+Do not demand a positive intervention effect from arbitrary coordinate e0:
+it may simply miss distributed negation information. Even a passing substantive
+screen establishes only a small development task worth studying. A later learned
+basis still needs polarity specificity and heldout generalisation beyond the
+same-polarity/random-subspace/permuted-label controls. No fitting is authorised.
+
+4. One primary score and its paired contrasts
+M(x)=sum logP(positive recipient candidate|x)-sum logP(negative candidate|x).
+Include declared EOS, exclude mask padding. Return raw sums/counts/EOS too.
+Baseline paired input effect: I(f,c)=M(x_present)-M(x_absent).
+Primary intervention contrast, holding recipient and donor finding fixed:
+P(f,c,r,d)=M(x_r patched from donor_present)-M(x_r patched from donor_absent).
+Both donors are a DIFFERENT finding from recipient c, with the same family.
+This pairs donor polarity while retaining exactly the same candidate strings.
+Also retain raw patched-minus-baseline margins for both recipient polarities.
+
+Average donor-polarity contrasts within recipient polarity/finding, then weight
+families equally. Final joint holdout has just3 families: show all family and
+case values and their equal-family mean; no population/generalisation interval.
+Report paired LoRA-minus-frozen I and P on identical cases descriptively.
+No recovery ratios, causal mediation fractions or posthoc responder filtering.
+A positive patch effect is conditional evidence at this site/score, not proof
+of a unique semantic mechanism, full causal abstraction or clinical safety.
+
+5. Controls and minimal later fit proposal — NOT IMPLEMENTED
+Self-patch: same source/span with the evaluated basis; numerical identity gate.
+Same-polarity: other finding, same assertion/family; record drift rather than
+assuming zero when source content changes. These cases are already paired with
+opposite-polarity donors (32 fit,24 selection,24 heldout interventions total).
+Random-subspace: rank1 Gaussian unit directions, fixed seeds3711/3712/3713;
+report each, with no cherry-picking or p-value from three random directions.
+Permuted-label fit: the manifest freezes seed3720's balanced shuffle over the
+16 fit donor labels; repeated donors retain their assigned shuffled label.
+Train the null control with the same init/order/budget as true labels. Evaluate
+ALL contrasts against true proposed assertions and use the true-fit selected
+step for this control; do not relabel heldout data or retune the null model.
+
+If separately approved after screening, fit ONE rank-one Q per checkpoint at
+this fixed site: Q=w/||w||, Gaussian init seed3710, norm guard1e-8, Adam lr0.01
+on w only,64 updates (two seeded permutations of32 fit cases; order seed3730).
+Loss=softplus(-s_donor*M_patched), s_present=+1/s_absent=-1. Fit includes both
+same/opposite recipient polarity, balanced donor labels, and summed scores.
+Select basis snapshot32 or64 by greater equal-family mean P on SELECTION only;
+ties within1e-6 choose32. No other rank/site/seed/learning-rate/verbaliser tuning.
+Lock selected basis/checkpoint/hash before touching joint heldout. Only one
+seed/one model checkpoint per condition: do not claim training-seed uncertainty.
+
+This needs a SEPARATE differentiable module, not the current inference adapter:
+model weights remain frozen/eval, but enable_grad must retain the graph through
+Q, the patch, downstream encoder and decoder. Donor constants may be captured
+under no_grad as ordinary detached tensors, not inference-mode caches. Never
+call the current inference_mode-decorated shift/scoring helpers during fitting.
+Before any real fit, require tiny-random-T5 finite-difference/nonzero-w-gradient,
+only-w-changes, Q-unit-norm, self-identity, padding/EOS/sum and exception-cleanup
+tests. This proposal implements none of that path and authorises no fitting.
+DAS is a methodological reference, not a claim this experiment reproduces it:
+https://proceedings.mlr.press/v236/geiger24a.html
+
+6. Trained LoRA representation and execution boundary
+The current adapter accepts plain T5 only. The coordinator must first select
+one immutable completed LoRA snapshot using the existing training dev-loss
+criterion, independent of these behavioural scores. Record exact base/tokenizer
+revision, adapter weights/config hashes, training selection identity and dtype.
+Create a FRESH SEPARATE CPU base+adapter copy, then merge_and_unload(safe_merge=True)
+on THAT COPY ONLY. Assert it is plain T5; freeze/eval it; record merged hashes.
+Do not mutate, merge, unload, reconfigure or save over a training model/path.
+Compare wrapped-copy versus merged-copy valid-token logits and summed margins
+on the four pilot cases, atol=rtol=1e-5; if equivalence fails, stop for review.
+The wrapped reference uses ordinary PEFT forwards and the same manual masked
+sum/gather semantics, outside the adapter, which remains plain-T5-only.
+This separate-copy preparation and its model forwards are also not run now.
+PEFT merging reference:
+https://huggingface.co/docs/peft/v0.17.0/package_reference/lora
+
+Parent approval of protocol/gates/proposed labels, coordinator compute timing,
+immutable checkpoint selection, separate-copy merge checks and a separately
+approved tokenizer preflight must precede the pilot. Fitting needs its own
+implementation review. Existing heldout families are never used for tuning.
+No GPU work, model loading/execution, tokenizer execution, model generation,
+checkpoint merge, environment modification or official final evaluation was
+performed in preparing these protocol files. Demo publication remains held.
