@@ -1,6 +1,8 @@
 """Read-only checks for prepared JSONL splits; repeated references are not leakage.
 
 Run: python verify_manifests.py --data data/prepared --expected-revision <SHA>
+To check dataset.py's stored keys, also pass
+--stored-key-contract nfkc-whitespace-casefold-sha256.
 The default record fields match dataset.py. Override with --field input=report,
 for example. Origins describe the official split encoded in row IDs, not the
 prepared filename: train/dev default to train:<index>, evaluation to validation.
@@ -20,6 +22,7 @@ import unicodedata
 
 FIELDS = {"id": "id", "input": "input", "target": "target", "key": "key", "image": "image"}
 ORIGINS = {"train": "train", "dev": "train", "evaluation": "validation"}
+HASH_CONTRACT = "nfkc-whitespace-casefold-sha256"
 
 
 def normalise(text):
@@ -37,14 +40,16 @@ def summary_hash(values):
 
 
 def verify_manifests(manifests, audit_path=None, *, fields=None, origins=None,
-                     expected_dataset=None, expected_revision=None):
+                     expected_dataset=None, expected_revision=None, stored_key_contract=None):
     """Return deterministic JSON-safe findings without writing any input file.
 
     Missing image identity is counted but never turned into a shared identity.
-    Stored report keys are optional; present keys must match recomputed hashes.
+    Canonical hashes are independently computed for overlap checks. Stored keys
+    are checked only when their normalization contract is explicitly supplied;
+    remapping a field name does not imply a producer's hash algorithm.
     Repeated reports/references inside a split are descriptive, not failures.
     An audit is checked against actual file digests/counts, not trusted blindly.
-    Without an audit, provenance_verified is false even if content checks pass.
+    Audit/origin consistency does not authenticate original source provenance.
     """
     names = dict(FIELDS)
     if fields:
@@ -53,6 +58,8 @@ def verify_manifests(manifests, audit_path=None, *, fields=None, origins=None,
         names.update(fields)
     if any(not isinstance(v, str) or not v for v in names.values()):
         raise ValueError("Field names must be nonempty strings")
+    if stored_key_contract not in (None, HASH_CONTRACT):
+        raise ValueError("Unsupported stored-key hash contract")
     expected_origins = dict(ORIGINS if origins is None else origins)
     checks, stats, identities = [], {}, {}
 
@@ -66,7 +73,7 @@ def verify_manifests(manifests, audit_path=None, *, fields=None, origins=None,
         problems = Counter()
         examples = defaultdict(list)
         digest = hashlib.sha256()
-        rows, blank_lines, missing_images = 0, 0, 0
+        rows, blank_lines, missing_images, stored_keys = 0, 0, 0, 0
 
         def problem(kind, line):
             problems[kind] += 1
@@ -104,8 +111,10 @@ def verify_manifests(manifests, audit_path=None, *, fields=None, origins=None,
                     if isinstance(text, str) and text.strip():
                         key = report_hash(text)
                         reports[key] += 1
-                        if names["key"] in row and values["key"] != key:
-                            problem("report_hash_mismatch", line_number)
+                        if names["key"] in row:
+                            stored_keys += 1
+                            if stored_key_contract is not None and values["key"] != key:
+                                problem("report_hash_mismatch", line_number)
                         if isinstance(target, str) and target.strip():
                             targets[key].add(report_hash(target))
                     image = values["image"]
@@ -130,6 +139,8 @@ def verify_manifests(manifests, audit_path=None, *, fields=None, origins=None,
             "rows": rows, "blank_lines": blank_lines, "manifest_sha256": digest.hexdigest(),
             "unique_ids": len(ids), "ids_sha256": summary_hash(ids),
             "unique_reports": len(reports), "report_hashes_sha256": summary_hash(reports),
+            "stored_key_rows": stored_keys,
+            "stored_key_rows_checked": stored_keys if stored_key_contract else 0,
             "repeated_report_rows": sum(n - 1 for n in reports.values()),
             "reports_with_multiple_targets": sum(len(v) > 1 for v in targets.values()),
             "unique_images": len(images), "image_ids_sha256": summary_hash(images),
@@ -145,6 +156,7 @@ def verify_manifests(manifests, audit_path=None, *, fields=None, origins=None,
         check(left + "/" + right + ".disjoint", not any(counts.values()), counts=counts)
 
     provenance = {"verified": False, "dataset": None, "revision": None,
+                  "verification_scope": "Audit metadata and origin-label consistency only.",
                   "expected_origins": dict(sorted(expected_origins.items()))}
     if audit_path is None:
         if expected_dataset is not None or expected_revision is not None:
@@ -186,6 +198,7 @@ def verify_manifests(manifests, audit_path=None, *, fields=None, origins=None,
             provenance["verified"] = all(c["passed"] for c in checks)
 
     return {"schema_version": 1, "ok": all(c["passed"] for c in checks),
+            "canonical_hash_contract": HASH_CONTRACT, "stored_key_contract": stored_key_contract,
             "fields": names, "splits": stats, "overlaps": overlaps, "checks": checks,
             "provenance": provenance,
             "limitations": ["Image overlap uses only available exact image identities.",
@@ -217,6 +230,8 @@ def main(argv=None):
                         help="Only verify records/leakage; provenance remains unverified")
     parser.add_argument("--expected-dataset")
     parser.add_argument("--expected-revision")
+    parser.add_argument("--stored-key-contract", choices=[HASH_CONTRACT],
+                        help="Explicit producer key contract; omitted keys remain unchecked")
     args = parser.parse_args(argv)
     if args.skip_audit and args.audit:
         parser.error("--skip-audit and --audit cannot be combined")
@@ -229,7 +244,7 @@ def main(argv=None):
         result = verify_manifests(
             manifests, None if args.skip_audit else (args.audit or args.data / "audit.json"),
             fields=fields, origins=origins, expected_dataset=args.expected_dataset,
-            expected_revision=args.expected_revision)
+            expected_revision=args.expected_revision, stored_key_contract=args.stored_key_contract)
     except ValueError as error:
         parser.error(str(error))
     json.dump(result, sys.stdout, sort_keys=True, indent=2, ensure_ascii=False)

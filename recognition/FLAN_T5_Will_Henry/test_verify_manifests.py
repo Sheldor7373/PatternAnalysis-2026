@@ -8,7 +8,8 @@ import sys
 import tempfile
 import unittest
 
-from verify_manifests import normalise, report_hash, verify_manifests
+from dataset import report_key as producer_report_key
+from verify_manifests import HASH_CONTRACT, normalise, report_hash, verify_manifests
 
 
 def record(identity, text, target="plain report", image=None):
@@ -41,10 +42,12 @@ class ManifestTests(unittest.TestCase):
 
     def test_complete_consistent_audit_and_original_ids(self):
         paths, audit = self.write()
-        result = verify_manifests(paths, audit, expected_dataset="test/dataset", expected_revision="abc123")
+        result = verify_manifests(paths, audit, expected_dataset="test/dataset", expected_revision="abc123",
+                                  stored_key_contract=HASH_CONTRACT)
         self.assertTrue(result["ok"])
         self.assertTrue(result["provenance"]["verified"])
         self.assertEqual(result["splits"]["dev"]["rows"], 1)
+        self.assertEqual(result["splits"]["dev"]["stored_key_rows_checked"], 1)
 
     def test_multiple_references_in_evaluation_are_retained_not_leakage(self):
         self.rows["evaluation"].append(record("validation:1", "NORMAL  chest", "different reference", "c.png"))
@@ -100,7 +103,7 @@ class ManifestTests(unittest.TestCase):
         self.rows["train"] += [record("train:2", "new report"), {"id": "train:3"}, []]
         self.rows["train"][1]["key"] = "incorrect"
         paths, audit = self.write()
-        result = verify_manifests(paths, audit)
+        result = verify_manifests(paths, audit, stored_key_contract=HASH_CONTRACT)
         issues = next(c for c in result["checks"] if c["check"] == "train.records")["issues"]
         self.assertEqual(set(issues), {"report_hash_mismatch", "missing_or_invalid_input",
                                      "missing_or_invalid_target", "non_object_record"})
@@ -186,10 +189,44 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(json.dumps(first, sort_keys=True), json.dumps(second, sort_keys=True))
         self.assertEqual(inputs, {p: p.read_bytes() for p in inputs})
 
+    def test_explicit_hash_contract_matches_actual_producer_on_unicode_and_whitespace(self):
+        samples = ["NO Effusion", "  NO\n\tEffusion ", "ＮＯ\u2003Effusion", "Straße",
+                   "e\u0301vidence", "évidence", "left\u00a0lung", "a\u200bb"]
+        for text in samples:
+            with self.subTest(text=text):
+                self.assertEqual(report_hash(text), producer_report_key(text))
+        self.rows["train"][0] = record("train:0", samples[2])
+        self.rows["train"][0]["key"] = producer_report_key(samples[2])
+        paths, audit = self.write()
+        self.assertTrue(verify_manifests(paths, audit, stored_key_contract=HASH_CONTRACT)["ok"])
+
+    def test_different_producer_keys_are_not_rejected_without_explicit_contract(self):
+        text = " ＮＯ\nEffusion "
+        self.rows["train"][0] = record("train:0", text)
+        raw_key = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        self.assertNotEqual(raw_key, report_hash(text))
+        self.rows["train"][0]["key"] = raw_key
+        paths, audit = self.write()
+        implicit = verify_manifests(paths, audit)
+        self.assertTrue(implicit["ok"])
+        self.assertIsNone(implicit["stored_key_contract"])
+        self.assertEqual(implicit["splits"]["train"]["stored_key_rows_checked"], 0)
+        explicit = verify_manifests(paths, audit, stored_key_contract=HASH_CONTRACT)
+        self.assertFalse(explicit["ok"])
+        self.rows["evaluation"][0] = record("validation:0", "no effusion")
+        paths, audit = self.write()
+        self.assertFalse(verify_manifests(paths, audit)["ok"])  # Independent overlap hash still applies.
+
+    def test_unknown_hash_contract_is_rejected(self):
+        paths, audit = self.write()
+        with self.assertRaises(ValueError):
+            verify_manifests(paths, audit, stored_key_contract="unknown")
+
     def test_cli_success_failure_exit_and_no_data_mutation(self):
         paths, audit = self.write()
         command = [sys.executable, "-B", str(Path(__file__).with_name("verify_manifests.py")),
-                   "--data", str(self.root), "--expected-revision", "abc123"]
+                   "--data", str(self.root), "--stored-key-contract", HASH_CONTRACT,
+                   "--expected-revision", "abc123"]
         inputs = {p: p.read_bytes() for p in [*paths.values(), audit]}
         good = subprocess.run(command, capture_output=True, text=True)
         self.assertEqual(good.returncode, 0, good.stderr)
