@@ -11,6 +11,21 @@ import time
 from dataset import write_json
 
 
+def parse_telemetry(line):
+    values = [value.strip() for value in line.strip().split(",")]
+    if len(values) != 4:
+        raise ValueError("Expected four GPU telemetry fields")
+
+    def optional(value):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+
+    return {"used_mib": float(values[0]), "total_mib": float(values[1]),
+            "temperature_c": optional(values[2]), "power_w": optional(values[3])}
+
+
 def run_pilot(command, output):
     samples = []
     stop = threading.Event()
@@ -21,10 +36,7 @@ def run_pilot(command, output):
                 result = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.total,temperature.gpu,power.draw",
                                          "--format=csv,noheader,nounits", "--id=0"],
                                         capture_output=True, text=True, timeout=5, check=True)
-                values = result.stdout.strip().split(",")
-                samples.append({"time": time.time(), "used_mib": float(values[0]),
-                                "total_mib": float(values[1]), "temperature_c": float(values[2]),
-                                "power_w": float(values[3])})
+                samples.append({"time": time.time(), **parse_telemetry(result.stdout)})
             except (OSError, subprocess.SubprocessError, ValueError, IndexError):
                 pass
             stop.wait(0.5)
