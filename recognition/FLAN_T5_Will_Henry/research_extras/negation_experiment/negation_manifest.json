@@ -11,7 +11,7 @@
     "families_sha256": "7fe977492a3e7436404d14717a5afb5fbfcaf37819b9130bf6dadfbb5428d419",
     "heldout_sha256": "1d6355daeaca0994440e256d6754f1d30ff31ce9ecfa014ad1915bfa42473669"
   },
-  "question": "Does a rank-one span-mean subspace carry transferable report negation across findings in fixed T5 checkpoints?",
+  "question": "At the fixed encoder site, does a rank-one span-mean intervention transfer polarity in recipient-specific two-candidate scores across findings?",
   "family_splits": {
     "fit": [
       "negation-01",
@@ -75,7 +75,14 @@
     "candidate_tokenization": "add_special_tokens=False; append exactly one configured EOS; explicit target mask; count includes EOS",
     "source_tokenization": "fixed prompt+source with exactly one configured source EOS; offsets required; prompt/EOS/padding ineligible",
     "span_mapping": "source_char_span is half-open; require whole-token boundary alignment after prompt offset; no silent expansion or inferred token indices",
-    "token_span_status": "null until separately approved tokenizer preflight; none guessed here"
+    "token_span_status": "null until separately approved tokenizer preflight; none guessed here",
+    "broadcast_span_mean_update": {
+      "row_vector_formula": "mu_r=mean(H_r[Sr]); mu_d=mean(H_d[Sd]); delta=(mu_d-mu_r)@Q@Q.T; H_r_patched[t]=H_r[t]+delta for EVERY t in Sr; all other positions unchanged",
+      "basis": "Q has orthonormal columns; fixed rank1 in this proposal",
+      "masking": "Sr/Sd are nonempty half-open token spans; eligible_mask is a subset of attention_mask; EVERY token in each span must be attended and eligible. Reject any masked/ineligible token; do not silently drop or reweight it. Prompt/EOS/padding are ineligible.",
+      "unequal_lengths": "Allowed; each span mean divides by its own token count; the SAME delta is broadcast across all recipient-span tokens.",
+      "preservation": "H_r_patched[t]-mean(H_r_patched[Sr])=H_r[t]-mu_r within Sr, up to floating-point tolerance. The orthogonal complement, outside-span positions and donor tensors are unchanged. This is activation algebra, not evidence of semantic preservation."
+    }
   },
   "screened_pilot": {
     "families": [
@@ -101,7 +108,7 @@
     "mechanical_gate": "all spans/masks valid; immutable parameters/checkpoints; self logits atol=rtol=1e-6 and absolute margin effect<=1e-6; explicit EOS/counts and merge equivalence pass",
     "input_gate": "both paired input contrasts M(present)-M(absent)>1e-6 for each checkpoint; show all values; no exclusions or metric/wording changes",
     "intervention_gate": "no positive patch-effect requirement for the arbitrary coordinate basis",
-    "failure_action": "stop and return all cases/scores for protocol review; do not fit, relax gates, change candidates or inspect heldout",
+    "failure_action": "stop and return all cases/scores for protocol review; do not fit, relax gates, change candidates or inspect heldout Failure diagnoses this fixed readout/comparison, not absence of a negation representation.",
     "input_gate_interpretation": "Numerical/mechanical feasibility only: two tiny positive contrasts on one easy family are not evidence of robust negation, a usable polarity readout, a localisable subspace, clinical quality or statistical significance."
   },
   "score_contract": {
@@ -112,7 +119,16 @@
     "aggregation": "average paired donor-polarity effects within each recipient polarity/finding, then give each family equal weight; show all family values and raw candidate sums/counts/EOS",
     "checkpoint_comparison": "paired LoRA-minus-frozen I and P on identical cases; descriptive single-checkpoint comparison",
     "recovery_ratios": "none",
-    "intervals": "none; three heldout families are too small for a population/generalisation claim"
+    "intervals": "none; three heldout families are too small for a population/generalisation claim",
+    "directional_reporting": {
+      "notation": "M_r is baseline recipient margin; M_r_from_d is patched margin with recipient assertion r and cross-finding donor assertion d; A=absent,P=present.",
+      "absent_recipient_present_donor": "delta_AP=M_A_from_P-M_A; expected positive direction; report signed value separately.",
+      "present_recipient_absent_donor": "delta_PA=M_P_from_A-M_P; expected negative direction; report signed value separately.",
+      "same_polarity_drift": "delta_AA=M_A_from_A-M_A and delta_PP=M_P_from_P-M_P; report signed and absolute drift separately, without assuming zero.",
+      "donor_consistent_preference": "Report M_r_from_P>0 and M_r_from_A<0 separately for each cross-polarity direction, with margins, counts/denominators and zero ties. Also report baseline preference; a flip requires a correct baseline recipient preference AND the donor-consistent post-patch preference.",
+      "primary_P_unchanged": "P_A=delta_AP-delta_AA; P_P=delta_PP-delta_PA. P can be positive without either or both post-patch margins crossing zero; it is not evidence of a bidirectional flip by itself.",
+      "aggregation": "Keep delta_AP,delta_PA,delta_AA,delta_PP and preference/flip counts separate by direction and family, alongside unchanged primary P; derive them from existing raw scores, with no additional candidate/model calls."
+    }
   },
   "controls": {
     "self_patch": "same source and identical span; same evaluated basis",
@@ -125,7 +141,8 @@
         3713
       ],
       "rule": "independent fixed Gaussian direction normalised to unit norm, no data-based choice; report each, not a p-value",
-      "generator": "torch CPU Generator.manual_seed(seed); randn(512,1,dtype=float32); divide by norm; do not execute until approved"
+      "generator": "torch CPU Generator.manual_seed(seed); randn(512,1,dtype=float32); divide by norm; do not execute until approved",
+      "limitation": "Three prespecified directions are diagnostic controls, not an empirical null distribution. Report all seeds3711/3712/3713 individually; no p-value, seed-shopping or posthoc seed replacement."
     },
     "permuted_label_fit": {
       "permutation_seed": 3720,
@@ -211,7 +228,13 @@
           "permuted_fit_assertion": "absent"
         }
       ],
-      "rule": "same init/optimizer/order as true fit; shuffle donor labels once over fit sources, keep mapping for repeated donors; use true labels for all reported evaluation contrasts; match true-fit selected step"
+      "rule": "same init/optimizer/order as true fit; shuffle donor labels once over fit sources, keep mapping for repeated donors; use true labels for all reported evaluation contrasts; match true-fit selected step",
+      "label_agreement": {
+        "unchanged": 10,
+        "changed": 6,
+        "total": 16
+      },
+      "limitation": "One fixed diagnostic shuffle retains10/16 labels and is not a strong null distribution. Keep seed3720 and its exact mapping; no resampling or seed-shopping to obtain a worse control."
     }
   },
   "future_fitting_proposal_not_implemented": {
@@ -3281,7 +3304,7 @@
     "https://proceedings.mlr.press/v236/geiger24a.html",
     "https://huggingface.co/docs/peft/v0.17.0/package_reference/lora"
   ],
-  "review_revision": 2,
+  "review_revision": 3,
   "substantive_signal_before_fitting": {
     "status": "ADDITIONAL PROPOSAL FOR PARENT REVIEW; not approved and not run",
     "enabled": false,
@@ -3315,7 +3338,22 @@
     "practical_threshold_note": "ln(2) is a proposed twofold change in the positive/negative candidate likelihood ratio across paired inputs, not a calibrated probability, significance cutoff or literature-established effect size.",
     "report": "All8 I values, both raw margins and positive/negative sums, lengths and EOS per pair/checkpoint; aggregate each family equally; do not hide failures.",
     "not_required": "No positive effect from arbitrary coordinate e0 is required; an unaligned coordinate may miss distributed information.",
-    "failure_action": "Stop before fitting and return the full panel for parent review. Do not rescue the readout by searching prompts/candidates/layers, dropping a checkpoint/family/finding, relaxing gates or using selection/heldout data.",
+    "failure_action": "Stop before fitting and return the full panel for parent review. Do not rescue the readout by searching prompts/candidates/layers, dropping a checkpoint/family/finding, relaxing gates or using selection/heldout data. Failure diagnoses this fixed readout/comparison, not absence of a negation representation.",
     "scope_limit": "Passing establishes a small development scoring task worth testing further, not that a rank-one causal mechanism exists. Specificity/generalisation versus same-polarity, random-subspace and permuted-label controls must still be evaluated later."
+  },
+  "claim_scope": {
+    "current_endpoint": "Recipient-candidate polarity transfer conditional on the fixed two-candidate readout only.",
+    "donor_finding_substitution": "Neither current candidate names the donor finding, so this score cannot detect donor-finding substitution or establish recipient-finding identity preservation.",
+    "cardiac_prefix_cancellation": "Families07/09 share the same cardiac clause in both candidates. Shared teacher-forced prefix token log probabilities cancel in their difference; literal inclusion does not establish cardiac preservation.",
+    "gate_failure": "A failed gate makes this fixed readout/comparison unsuitable under the specified conditions, not proof that the model lacks a negation representation."
+  },
+  "proposed_semantic_specificity_readout": {
+    "status": "PROPOSED ONLY; requires separate parent review; not implemented, not enabled and not part of current scoring/budget",
+    "enabled": false,
+    "implemented": false,
+    "finding_identity": "Add donor-finding positive/negative distractors to the existing recipient-finding pair (four main-finding candidates total), retaining the same context. At donor polarity s, report L(recipient_finding,s)-L(donor_finding,s) before/after patch and its paired change, with raw sums/lengths/EOS.",
+    "cardiac_preservation": "For families07/09, add a separate cardiac-only pair: Cardiac enlargement is present. versus No cardiac enlargement is present. Score the source-consistent cardiac assertion minus its reversal before/after patch; here the cardiac assertion differs and does not cancel as a common prefix.",
+    "review_gate": "Validate the added fixed candidate readouts on development-only data and lock wording/decision rules before heldout use; family09 remains heldout and cannot be used to tune this extension. Report baseline preferences and length/EOS information; no silent normalisation or new posthoc verbaliser search.",
+    "bounded_claim": "Even successful added scores would support contrastive finding-identity/cardiac-assertion preference only, not free-generation fidelity or clinical semantic preservation."
   }
 }

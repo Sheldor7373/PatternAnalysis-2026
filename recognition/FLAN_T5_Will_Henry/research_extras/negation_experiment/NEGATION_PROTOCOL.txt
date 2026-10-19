@@ -1,7 +1,7 @@
 COMP3710 NEGATION SPAN-MEAN EXPERIMENT — PROPOSED, NOT EXECUTION APPROVAL
 
-One question: does a rank-one encoder subspace carry transferable report
-negation across findings in fixed frozen-base and trained-LoRA checkpoints?
+One question: does a rank-one span-mean intervention transfer polarity in
+recipient-specific two-candidate scores across findings at this fixed site?
 The accompanying negation_manifest.json gives every source, recipient-specific
 candidate pair, character span, donor pairing, control and permutation label.
 No model, tokenizer, merge, fitting or evaluation has run for this proposal.
@@ -36,11 +36,26 @@ expansion, guessed token indices or truncation. Halt for review if a complete
 source/candidate exceeds the adapter's64-token cap or boundaries do not align.
 Token spans, IDs/mask hashes and candidate counts deliberately remain null now.
 
+Actual adapter update, using row-vector activations and orthonormal columns Q:
+  mu_r=mean(H_recipient[Sr]); mu_d=mean(H_donor[Sd])
+  delta=(mu_d-mu_r) @ Q @ Q.T
+  H_patched[t]=H_recipient[t]+delta for EVERY recipient token t in Sr.
+Each nonempty span uses its own token count, so unequal lengths are permitted.
+Eligibility must be a subset of attention; EVERY span token must be attended
+and eligible. Reject an ineligible/masked token rather than silently excluding
+or reweighting it. Prompt, source EOS and padding are ineligible.
+The SAME delta is broadcast: within-span residuals satisfy
+H_patched[t]-mean(H_patched[Sr])=H_recipient[t]-mu_r, within numeric tolerance.
+The orthogonal complement, outside-span positions and donor tensors are unchanged.
+This is activation-level algebra, not evidence of preserved report semantics.
+
 For recipient finding c, candidate positive is 'C is present.' and negative is
 'No c is present.' Candidates always name the RECIPIENT, never the other donor
 finding. Family07 prefixes BOTH with 'No cardiac enlargement is present.';
-family09 prefixes BOTH with 'Cardiac enlargement is present.' This retains the
-source's secondary proposition. Tokenise candidate text without automatic
+family09 prefixes BOTH with 'Cardiac enlargement is present.' This retains only
+the literal candidate text: shared teacher-forced cardiac-prefix log probabilities
+cancel from the margin, so the score does NOT establish cardiac preservation.
+Tokenise candidate text without automatic
 special tokens, append exactly one configured EOS, and use an explicit target
 mask independent of token ID. Report both token counts INCLUDING EOS and their
 EOS flags. No silent length normalisation or alternate verbaliser search.
@@ -100,14 +115,43 @@ P(f,c,r,d)=M(x_r patched from donor_present)-M(x_r patched from donor_absent).
 Both donors are a DIFFERENT finding from recipient c, with the same family.
 This pairs donor polarity while retaining exactly the same candidate strings.
 Also retain raw patched-minus-baseline margins for both recipient polarities.
+Report both directions SEPARATELY (A=absent,P=present):
+  delta_AP=M_A_from_P-M_A: absent recipient/present donor, expected positive.
+  delta_PA=M_P_from_A-M_P: present recipient/absent donor, expected negative.
+Report same-polarity drift delta_AA=M_A_from_A-M_A and delta_PP=M_P_from_P-M_P,
+signed and absolute, without assuming zero. Report donor-consistent post-patch
+preferences M_A_from_P>0 and M_P_from_A<0 separately, with margins, counts,
+denominators and zero ties. Record baseline preferences: a flip requires a
+correct baseline recipient preference and a donor-consistent post-patch one.
+Keep these outcomes separate by direction/family; all use existing raw scores.
+Primary P is unchanged: P_A=delta_AP-delta_AA; P_P=delta_PP-delta_PA. Positive
+P alone can occur without either/both margins crossing zero: it is NOT a
+bidirectional polarity flip.
 
 Average donor-polarity contrasts within recipient polarity/finding, then weight
 families equally. Final joint holdout has just3 families: show all family and
 case values and their equal-family mean; no population/generalisation interval.
 Report paired LoRA-minus-frozen I and P on identical cases descriptively.
 No recovery ratios, causal mediation fractions or posthoc responder filtering.
-A positive patch effect is conditional evidence at this site/score, not proof
-of a unique semantic mechanism, full causal abstraction or clinical safety.
+Current claims are restricted to RECIPIENT-CANDIDATE POLARITY TRANSFER in this
+fixed two-candidate score. Neither candidate tests donor-finding substitution,
+so P cannot establish recipient-finding identity preservation. The common cardiac
+prefix in07/09 cancels and does not establish cardiac preservation. No generated
+report fidelity, unique semantic mechanism, full causal abstraction or clinical
+safety is measured. A failed gate diagnoses this readout/comparison under these
+conditions, NOT absence of a negation representation in the model.
+
+PROPOSED minimal stronger readout - separate review required, NOT IMPLEMENTED:
+Add positive/negative DONOR-finding distractors to the recipient pair (four main
+candidates total). At donor polarity s, compare L(recipient finding,s) against
+L(donor finding,s), baseline and patched, plus paired change and sums/lengths/EOS.
+For07/09 add a separate cardiac-only pair: 'Cardiac enlargement is present.'
+versus 'No cardiac enlargement is present.' Score source-consistent assertion
+minus reversal before/after patch; the cardiac assertion now differs instead of
+cancelling as a shared prefix. Validate and lock any added readout on development
+only; heldout09 cannot tune it. These proposed additions are not in current
+cases/budget. Even success would show contrastive identity/cardiac preference,
+not free-generation fidelity or clinical semantic preservation.
 
 5. Controls and minimal later fit proposal — NOT IMPLEMENTED
 Self-patch: same source/span with the evaluated basis; numerical identity gate.
@@ -115,12 +159,15 @@ Same-polarity: other finding, same assertion/family; record drift rather than
 assuming zero when source content changes. These cases are already paired with
 opposite-polarity donors (32 fit,24 selection,24 heldout interventions total).
 Random-subspace: rank1 Gaussian unit directions, fixed seeds3711/3712/3713;
-report each, with no cherry-picking or p-value from three random directions.
+report each. Three directions do NOT form an empirical null distribution; no
+p-value, seed-shopping or posthoc seed replacement.
 Permuted-label fit: the manifest freezes seed3720's balanced shuffle over the
 16 fit donor labels; repeated donors retain their assigned shuffled label.
-Train the null control with the same init/order/budget as true labels. Evaluate
+This ONE shuffle leaves10/16 labels unchanged (6 changed); it is a limited
+diagnostic, not a strong null. Keep its exact mapping/seed, without resampling
+to obtain a worse control. Fit it with the same init/order/budget. Evaluate
 ALL contrasts against true proposed assertions and use the true-fit selected
-step for this control; do not relabel heldout data or retune the null model.
+step for this control; do not relabel heldout data or retune the shuffled-label control.
 
 If separately approved after screening, fit ONE rank-one Q per checkpoint at
 this fixed site: Q=w/||w||, Gaussian init seed3710, norm guard1e-8, Adam lr0.01
