@@ -42,9 +42,14 @@ class TrainingTests(unittest.TestCase):
                 first = json.loads((resumed / "training_metrics.json").read_text())
                 self.assertEqual(first["optimizer_steps"], 1)
                 self.assertEqual(first["stop_reason"], "time_budget")
+                checkpoint_settings_path = resumed / "latest" / "experiment.json"
+                checkpoint_settings = json.loads(checkpoint_settings_path.read_text())
+                checkpoint_settings["revision"] = "original-pinned-sha"
+                checkpoint_settings_path.write_text(json.dumps(checkpoint_settings))
                 main(parser().parse_args(common + ["--output", str(resumed), "--resume"]))
             final = json.loads((resumed / "training_metrics.json").read_text())
             self.assertEqual(final["optimizer_steps"], 4)
+            self.assertEqual(final["revision"], "original-pinned-sha")
             left, _, _ = load_checkpoint(whole / "latest", torch.device("cpu"))
             right, _, _ = load_checkpoint(resumed / "latest", torch.device("cpu"))
             for name, tensor in left.state_dict().items():

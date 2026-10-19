@@ -3,6 +3,7 @@
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 import torch
 from transformers import T5Config, T5ForConditionalGeneration, DataCollatorForSeq2Seq, PreTrainedTokenizerFast
 from tokenizers import Tokenizer
@@ -71,6 +72,29 @@ class ModelTests(unittest.TestCase):
     def test_frozen_model_has_no_trainable_parameters(self):
         model = RadiologySimplifier(str(self.path), mode="frozen")
         self.assertEqual(model.parameter_counts()["trainable_parameters"], 0)
+
+    def test_full_checkpoint_loads_without_the_original_base(self):
+        from transformers import AutoModelForSeq2SeqLM
+        model = RadiologySimplifier(str(self.path), mode="full")
+        model.eval()
+        batch = self.batch(model)
+        expected = model(**batch).logits.detach()
+        with tempfile.TemporaryDirectory() as folder:
+            model.save(folder, self.tokenizer,
+                       {"model": "base-no-longer-available", "revision": "pinned-sha", "mode": "full"})
+            original_load = AutoModelForSeq2SeqLM.from_pretrained
+
+            def checkpoint_only(path, *args, **kwargs):
+                self.assertEqual(Path(path), Path(folder))
+                return original_load(path, *args, **kwargs)
+
+            with patch("modules.AutoModelForSeq2SeqLM.from_pretrained", side_effect=checkpoint_only) as loader:
+                restored, tokenizer, settings = load_checkpoint(folder, torch.device("cpu"))
+                self.assertEqual(loader.call_count, 1)
+            restored.eval()
+            torch.testing.assert_close(restored(**batch).logits, expected)
+            self.assertEqual(settings["revision"], "pinned-sha")
+            self.assertEqual(tokenizer.pad_token_id, self.tokenizer.pad_token_id)
 
 
 if __name__ == "__main__":

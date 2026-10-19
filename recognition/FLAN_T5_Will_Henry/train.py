@@ -57,7 +57,7 @@ def main(args):
     else:
         tokenizer = AutoTokenizer.from_pretrained(args.model, revision=args.revision)
         model = RadiologySimplifier(args.model, args.revision, args.mode, args.rank).to(device)
-    revision = model.model.config._commit_hash or args.revision
+    revision = saved_settings["revision"] if args.resume else (model.model.config._commit_hash or args.revision)
     if args.gradient_checkpointing:
         model.model.gradient_checkpointing_enable()
         model.model.enable_input_require_grads()

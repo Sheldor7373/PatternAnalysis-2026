@@ -15,7 +15,10 @@ class RadiologySimplifier(nn.Module):
         if mode not in {"full", "lora", "frozen"}:
             raise ValueError(f"Unknown mode: {mode}")
         self.mode = mode
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name, revision=revision)
+        if checkpoint and mode != "lora":
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
+        else:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name, revision=revision)
         if mode == "lora":
             from peft import LoraConfig, PeftModel, TaskType, get_peft_model
             if checkpoint:
@@ -24,8 +27,6 @@ class RadiologySimplifier(nn.Module):
                 config = LoraConfig(task_type=TaskType.SEQ_2_SEQ_LM, r=rank, lora_alpha=rank * 2,
                                     lora_dropout=0.05, target_modules=["q", "v"], bias="none")
                 self.model = get_peft_model(self.model, config)
-        elif checkpoint:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
         if mode == "frozen":
             self.requires_grad_(False)
 
