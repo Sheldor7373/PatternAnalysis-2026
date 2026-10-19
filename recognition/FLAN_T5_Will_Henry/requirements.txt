@@ -1,0 +1,13 @@
+# Install the CUDA build of torch separately; see README.
+torch==2.8.0
+transformers==4.57.1
+peft==0.17.1
+accelerate==1.10.1
+huggingface-hub==0.35.3
+sentencepiece==0.2.1
+safetensors==0.6.2
+pyarrow==21.0.0
+numpy==2.2.6
+rouge-score==0.1.2
+nltk==3.9.2
+matplotlib==3.10.6
