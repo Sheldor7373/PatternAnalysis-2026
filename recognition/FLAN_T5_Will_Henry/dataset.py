@@ -63,14 +63,10 @@ def partition_rows(train, validation, seed=3710, dev_fraction=0.1):
         raise ValueError("dev_fraction must be between zero and one")
     heldout_keys = {r["key"] for r in validation}
     heldout_images = {r["image"] for r in validation if r["image"]}
-    kept, overlap = [], 0
-    for row in train:
-        if row["key"] in heldout_keys or (row["image"] and row["image"] in heldout_images):
-            overlap += 1
-        else:
-            kept.append(row)
-    # Union-find also handles two different reports attached to the same image.
-    parent = list(range(len(kept)))
+    # Build components BEFORE removing anything. A removed row can connect a
+    # different report/image to validation through a chain of repeated identities.
+    combined = train + validation
+    parent = list(range(len(combined)))
 
     def find(index):
         while parent[index] != index:
@@ -79,7 +75,7 @@ def partition_rows(train, validation, seed=3710, dev_fraction=0.1):
         return index
 
     previous = {}
-    for index, row in enumerate(kept):
+    for index, row in enumerate(combined):
         identities = [("report", row["key"])]
         if row["image"]:
             identities.append(("image", row["image"]))
@@ -88,9 +84,16 @@ def partition_rows(train, validation, seed=3710, dev_fraction=0.1):
                 parent[find(index)] = find(previous[identity])
             else:
                 previous[identity] = index
-    groups = {}
-    for index, row in enumerate(kept):
-        groups.setdefault(find(index), []).append(row)
+    reserved = {find(index) for index in range(len(train), len(combined))}
+    groups, removed = {}, []
+    direct_overlap = 0
+    for index, row in enumerate(train):
+        component = find(index)
+        if component in reserved:
+            removed.append(row["id"])
+            direct_overlap += int(row["key"] in heldout_keys or bool(row["image"] and row["image"] in heldout_images))
+        else:
+            groups.setdefault(component, []).append(row)
     keys = sorted(groups)
     random.Random(seed).shuffle(keys)
     if len(keys) < 2:
@@ -105,7 +108,9 @@ def partition_rows(train, validation, seed=3710, dev_fraction=0.1):
     val_targets = {}
     for row in validation:
         val_targets.setdefault(row["key"], set()).add(normalise(row["target"]))
-    stats = {"train_overlap_removed": overlap, "training_groups": len(groups),
+    stats = {"train_overlap_removed": len(removed), "train_direct_overlap_removed": direct_overlap,
+             "train_transitive_overlap_removed": len(removed) - direct_overlap,
+             "removed_train_ids": removed, "training_groups": len(groups),
              "dev_group_fraction": dev_fraction,
              "validation_duplicate_reports": len(validation) - len(val_targets),
              "conflicting_validation_targets": sum(len(v) > 1 for v in val_targets.values()),
@@ -152,7 +157,8 @@ def prepare(output, revision=DATA_REVISION, seed=3710, raw_dir=None):
             path = Path(raw_dir) / filename
         else:
             from huggingface_hub import hf_hub_download
-            path = hf_hub_download(DATASET, f"data/{filename}", repo_type="dataset", revision=revision)
+            path = hf_hub_download(DATASET, f"data/{filename}", repo_type="dataset", revision=revision,
+                                   cache_dir=output.parent / "cache")
         files[split] = {"sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()}
         table = pq.read_table(path)
         files[split].update(raw_rows=table.num_rows, fields={f.name: str(f.type) for f in table.schema})
@@ -172,7 +178,7 @@ def prepare(output, revision=DATA_REVISION, seed=3710, raw_dir=None):
              "raw_file_provenance": "Caller-supplied raw files; verify hashes against pinned download" if raw_dir
              else "Downloaded via Hugging Face Hub at pinned revision"}
     write_json(output / "audit.json", audit)
-    print(json.dumps(audit, indent=2))
+    print(json.dumps({k: v for k, v in audit.items() if k != "removed_train_ids"}, indent=2))
 
 
 def length_summary(values):

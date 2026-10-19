@@ -56,6 +56,31 @@ class SplitTests(unittest.TestCase):
             self.assertTrue(not ({"train:0", "train:1", "train:2"} & present)
                             or {"train:0", "train:1", "train:2"}.issubset(present))
 
+    def test_validation_connections_survive_removed_bridge_rows(self):
+        training = rows(["A", "B", "B", "C", "independent one", "independent two"], "train")
+        validation = rows(["A"], "validation")
+        training[0]["image"] = "Y"
+        training[1]["image"] = "Y"
+        training[2]["image"] = "Z"
+        training[3]["image"] = "Z"
+        splits, audit = partition_rows(training, validation)
+        remaining = {r["id"] for r in splits["train"] + splits["dev"]}
+        self.assertEqual(remaining, {"train:4", "train:5"})
+        self.assertEqual(audit["removed_train_ids"], ["train:0", "train:1", "train:2", "train:3"])
+        self.assertEqual(audit["train_direct_overlap_removed"], 1)
+        self.assertEqual(audit["train_transitive_overlap_removed"], 3)
+        self.assertEqual(splits["evaluation"], validation)
+
+    def test_validation_image_can_connect_a_chain_of_reports(self):
+        training = rows(["A", "A", "B", "independent one", "independent two"], "train")
+        validation = rows(["different report"], "validation")
+        training[0]["image"] = validation[0]["image"]
+        training[1]["image"] = "bridge"
+        training[2]["image"] = "bridge"
+        splits, audit = partition_rows(training, validation)
+        self.assertEqual(audit["train_overlap_removed"], 3)
+        self.assertEqual({r["id"] for r in splits["train"] + splits["dev"]}, {"train:3", "train:4"})
+
 
 if __name__ == "__main__":
     unittest.main()
