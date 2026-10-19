@@ -99,8 +99,72 @@ score by -9; the nuisance control changes it by zero within floating-point error
 These are constructed arithmetic checks, not model effects. `ToySite` is a local
 callback registry with cleanup on normal/exceptional exit; it cannot register
 real framework hooks. Tests cover rank-k algebra, identity patches, known effect,
-span/site/mask errors, finite arithmetic and callback cleanup. Real-model hooks,
-fitting, inference and claims of causal abstraction remain deferred to the
-documented experiment protocol. The conceptual interchange-intervention
+span/site/mask errors, finite arithmetic and callback cleanup. Pretrained-model
+execution, fitting and claims of causal abstraction remain deferred to the
+documented experiment protocol. The separate adapter below is exercised
+only with a tiny randomly initialized T5. The conceptual interchange-intervention
 background is [Geiger et al. (2021)](https://proceedings.neurips.cc/paper/2021/hash/4f5c422f4d49a5a807eda27434231040-Abstract.html);
 this toy does not reproduce that paper's experiments.
+
+## Fixed-basis CPU T5 span-mean adapter
+
+`t5_intervention_adapter.py` takes an existing plain `T5ForConditionalGeneration`
+already frozen and fully in eval mode on CPU. It never loads weights, moves
+devices, calls `generate`, changes model state, or fits a basis. Initially it
+supports one donor/recipient example per call, float32/float64 hidden states,
+and supplied orthonormal `Q[d,k]` with matching dtype. PEFT wrappers and other
+architectures are outside this initial interface.
+
+```powershell
+python -B -m unittest test_t5_intervention_adapter -v
+```
+
+Construct `SourceTokens(input_ids, attention_mask, eligible_mask)` using CPU
+`int64` IDs shaped `[1,T]` and explicit Boolean masks of the same shape. Spans
+are nonempty half-open `(start, stop)` pairs; all span tokens must be eligible
+and attended. The caller defines eligibility for content/prompt/special tokens;
+the adapter never infers it from token IDs or character offsets. Source and
+candidate lengths are limited to 64 tokens for restrained CPU tests.
+
+`T5SpanMeanAdapter(model, "encoder.block.0", Q)` accepts only existing named
+encoder-block output sites. `encode_pair(recipient, donor, recipient_span=Sr,
+donor_span=Sd)` captures the donor and returns baseline/patched recipient encoder
+outputs. At the specified block it applies, in row-vector notation:
+
+`delta = (mean(H_donor[Sd]) - mean(H_recipient[Sr])) @ Q @ Q.T`
+
+`H_patched[t] = H_recipient[t] + delta` for every `t` in `Sr`.
+
+Donor/recipient spans may have different lengths. Within-span token differences,
+the orthogonal complement and positions outside the recipient span are preserved
+up to floating-point tolerance. Activations are copied; T5 block tuple fields
+after the hidden-state tensor are retained. Each site must execute exactly once.
+Only adapter-owned hook handles are removed in `finally`; unrelated hooks remain.
+Encoder hooks are removed before teacher-forced decoder scoring.
+
+`Candidate(input_ids, target_mask, eos_included)` has an explicit nonempty valid
+prefix/right-padding mask independent of token ID. `eos_included` must match
+one final valid EOS or no valid EOS; nothing is appended or dropped silently.
+Masked target IDs do not contribute to the score. Decoder masks explicitly keep
+the start position visible even when T5's decoder-start ID equals its pad ID.
+
+`adapter.compare(recipient, donor, candidate_a, candidate_b, recipient_span=Sr,
+donor_span=Sd)` returns baseline/patched A/B **summed** log probabilities, token
+counts (including EOS iff declared), EOS inclusion, A-minus-B margins and the
+patched-minus-baseline margin effect. There is no length normalisation. Each
+recipient encoder output is reused across candidates. Log-softmax/gather/sums
+are evaluated in float64; these are model scores, not calibrated confidence.
+
+Tests use synthetic arrays and a seeded random T5 (vocabulary 32, hidden width
+16, two encoder blocks, one decoder block), with no pretrained assets. Float32
+self-patch logits use `atol=rtol=1e-6`; margin effects use absolute tolerance
+`1e-6`. Parameters are checked unchanged for self and non-self interventions.
+Tests also cover unequal-span algebra, masked padding with arbitrary token IDs,
+manual log-probability sums, explicit EOS, validation and hook cleanup after
+capture/patch/decoder exceptions while preserving unrelated observers.
+
+`torch.inference_mode()` is appropriate for this **fixed-basis inference** adapter
+only. Future subspace fitting requires a separately reviewed differentiable
+path; this module does not train `Q`. Pretrained execution, GPU use, basis
+fitting, clinical labels and final evaluation remain outside this module's test
+evidence and await the documented experiment protocol.
