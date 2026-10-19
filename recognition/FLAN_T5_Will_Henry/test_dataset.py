@@ -22,8 +22,10 @@ class SplitTests(unittest.TestCase):
         for left, right in [("train", "dev"), ("train", "evaluation"), ("dev", "evaluation")]:
             self.assertFalse(keys[left] & keys[right])
         self.assertEqual(audit["train_overlap_removed"], 1)
-        self.assertEqual(audit["train_duplicate_reports_removed"], 1)
         self.assertEqual(audit["validation_duplicate_reports"], 1)
+        self.assertEqual(len(splits["evaluation"]), len(validation))
+        self.assertTrue(all(r["id"].startswith("train:") for r in splits["dev"]))
+        self.assertEqual(len(splits["train"]) + len(splits["dev"]), len(training) - 1)
         self.assertEqual(partition_rows(training, validation), (splits, audit))
 
     def test_image_overlap_is_removed(self):
@@ -42,6 +44,17 @@ class SplitTests(unittest.TestCase):
         sample = select_rows(list(range(100)), 10)
         self.assertEqual(sample, select_rows(list(range(100)), 10))
         self.assertNotEqual(sample, list(range(10)))
+
+    def test_image_connections_keep_different_reports_together(self):
+        training = rows(["a", "b", "c", "d", "e"], "train")
+        training[1]["image"] = training[0]["image"]
+        training[2]["input"] = "a"
+        training[2]["key"] = training[0]["key"]
+        splits, _ = partition_rows(training, rows(["z"], "validation"), dev_fraction=0.5)
+        for split in ("train", "dev"):
+            present = {r["id"] for r in splits[split]}
+            self.assertTrue(not ({"train:0", "train:1", "train:2"} & present)
+                            or {"train:0", "train:1", "train:2"}.issubset(present))
 
 
 if __name__ == "__main__":
