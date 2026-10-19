@@ -10,6 +10,8 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+import re
+import unicodedata
 
 PAPER = "https://aclanthology.org/2020.acl-main.442/"
 FINDINGS = ("pleural effusion", "pneumothorax", "focal opacity")
@@ -141,6 +143,10 @@ def make_cases(specs=None):
     return cases
 
 
+def canonical_source(text):
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip().casefold()
+
+
 def validate(specs, cases):
     if len(specs) != 40 or len({f["family_id"] for f in specs}) != 40:
         raise ValueError("Expected exactly forty distinct template families")
@@ -149,12 +155,16 @@ def validate(specs, cases):
     mapping = {f["family_id"]: f for f in specs}
     if len({row["id"] for row in cases}) != len(cases) or len(cases) != 480:
         raise ValueError("Expected 480 uniquely identified fixture cases")
+    text_splits = {}
     for row in cases:
         family = mapping[row["family_id"]]
         if row["split"] != family["split"]:
             raise ValueError("Family variants cannot cross partitions")
         if row["source_kind"] != "synthetic; no patient records" or "{" in row["input"]:
             raise ValueError("Non-synthetic or unresolved fixture")
+        text_splits.setdefault(canonical_source(row["input"]), set()).add(row["split"])
+    if any(len(parts) != 1 for parts in text_splits.values()):
+        raise ValueError("Canonical source text cannot cross partitions")
     for key in ("family_id", "directional_pair_id", "invariance_group_id"):
         groups = {}
         for row in cases:

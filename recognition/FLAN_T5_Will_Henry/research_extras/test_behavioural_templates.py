@@ -9,7 +9,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from behavioural_templates import families, make_cases, validate, write_suite
+from behavioural_templates import families, make_cases, validate, write_suite, canonical_source
 
 
 class BehaviouralTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class BehaviouralTests(unittest.TestCase):
         for row in cases:
             invariants[row["invariance_group_id"]].append(row)
             contrasts[row["directional_pair_id"]].append(row)
-            text_splits[" ".join(row["input"].lower().split())].add(row["split"])
+            text_splits[canonical_source(row["input"])].add(row["split"])
         self.assertTrue(all(len(parts) == 1 for parts in text_splits.values()))
         for rows in invariants.values():
             self.assertEqual(len(rows), 2)
@@ -63,6 +63,19 @@ class BehaviouralTests(unittest.TestCase):
         altered[0]["split"] = "heldout"
         with self.assertRaisesRegex(ValueError, "cross partitions"):
             validate(specs, altered)
+
+    def test_cross_family_canonical_source_overlap_is_rejected(self):
+        specs, cases = families(), make_cases()
+        development = next(row for row in cases if row["split"] == "development")
+        heldout = next(row for row in cases if row["split"] == "heldout")
+        text = development["input"].upper()
+        # Fullwidth ASCII and ideographic/repeated whitespace collapse under NFKC.
+        heldout["input"] = "\t" + "".join(chr(ord(c) + 0xFEE0) if "!" <= c <= "~" else "\u3000  "
+                                           for c in text) + "\n"
+        self.assertNotEqual(development["family_id"], heldout["family_id"])
+        self.assertEqual(canonical_source(development["input"]), canonical_source(heldout["input"]))
+        with self.assertRaisesRegex(ValueError, "Canonical source text cannot cross partitions"):
+            validate(specs, cases)
 
     def test_reproducible_exports_fingerprints_and_blank_review_fields(self):
         with tempfile.TemporaryDirectory() as directory:
