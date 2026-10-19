@@ -42,3 +42,38 @@ Scope controls include secondary propositions. All labels are author-proposed
 and require human review for wording, clinical plausibility and correctness.
 This is a suite preparation result, not a measured model failure rate. The
 project's limited regex flags cannot validate all these capabilities.
+
+## Saved-array linear CKA (no inference)
+
+`representation_analysis.py` compares already pooled numeric representations.
+It loads no model and performs no tokenisation, capture, fitting or PCA. Based on
+[Kornblith et al. (2019)](https://proceedings.mlr.press/v97/kornblith19a.html), it
+centres feature columns across the same ordered reports and computes biased
+linear CKA: `||Xc.T Yc||_F^2 / (||Xc.T Xc||_F * ||Yc.T Yc||_F)`, using the
+equivalent Gram form. Positive isotropic rescaling keeps extreme finite magnitudes
+numerically manageable. CKA describes similarity, not quality or causation.
+
+```powershell
+python -B -m unittest test_representation_analysis -v
+python -B representation_analysis.py --left left.npz --right right.npz --output ../runs/cka-review.json
+```
+
+Each small NPZ must contain exactly `activations` (real `[reports, features]`),
+`report_ids` (unique nonempty Unicode strings in identical order), and `metadata`
+(scalar Unicode JSON text). Objects/pickle are refused. Maximums: 256 reports,
+2,048 features per model, 8 MB on disk and expanded. Feature widths may differ.
+IDs are never silently reordered, intersected or deduplicated. At least three
+reports are needed; fewer reports or zero centred variance produce null CKA and
+an explicit unavailable reason. Nonfinite/malformed arrays raise errors. No
+sample interval is estimated; small panels can inflate descriptive similarity.
+
+Required matching metadata: `data_split` (`synthetic`, `train` or `dev` only),
+`source_manifest_sha256`, `tokenizer_revision`, `prompt_sha256`, `source_length`,
+`pooling`, `site`, and ordered `visible_tokens_sha256` (one lowercase SHA256 per
+report, over exact visible token IDs and mask). Required version fields are
+`model_label`, `model_revision`, `checkpoint_sha256`; model versions may differ
+and are retained. `pooling` must describe content/prompt/special/padding treatment.
+The module verifies consistency of recorded metadata, not upstream extraction or
+weight provenance. Tests provide the complete synthetic schema. Source files
+are fingerprinted/read-only and existing output files cannot be replaced.
+No official validation arrays are accepted. Shared PCA is deliberately deferred.
