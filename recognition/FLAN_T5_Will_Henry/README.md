@@ -9,8 +9,8 @@ the extra training cost is justified.
 
 ## Status
 
-Implementation in progress. There are no trained-model results yet.
-The initial split tests pass; the real-data audit and GPU benchmark are pending.
+Preparation checks pass: 51 tests, the real-data audit and bounded local GPU
+pilots. These establish pipeline and memory feasibility, not final model quality.
 The feasibility review is in [FEASIBILITY.md](FEASIBILITY.md).
 
 ## Data
@@ -20,13 +20,14 @@ The download is pinned to revision `6783ab38f9de28c4372799346f51d3927ae7eb9a`.
 It contains 150,454 training rows and 10,000 validation rows. We do not use the
 challenge test set: the assignment specifies held-out validation evaluation.
 
-`dataset.py` removes missing pairs, groups identical normalised reports, removes
-training reports/images shared with validation, and reserves part of validation
-for final evaluation. Development and final evaluation share no report keys or
-image paths. One example per distinct report prevents repeated boilerplate from
-dominating the primary score. This changes the weighting of the supplied data;
-we report it explicitly rather than presenting the result as a challenge score.
-Conflicting reference rewrites are counted in the audit. These rules cannot
+The raw audit found no missing report/target pairs. `dataset.py` builds report/image
+connected components and removes 42,249 validation-connected training rows.
+The remaining rows form 97,411 training and 10,794 training-derived development
+examples. All 10,000 official validation rows are reserved for locked final
+evaluation, retaining the original row weighting and reference rewrites.
+The independent verifier passes all 26 checks, with no cross-split ID, canonical
+report or available image overlap. Conflicting reference rewrites are counted
+in the audit. These rules cannot
 establish patient independence because patient IDs are not supplied.
 
 ```bash
@@ -44,9 +45,13 @@ trainable parameters, peak GPU memory, generation throughput, and 3–5 actual
 failure cases. Development data selects settings; final evaluation does not.
 We will distinguish measured results from estimates and flag small smoke tests.
 
-The local machine has an RTX 3050 Ti Laptop GPU with 4 GB VRAM. Local feasibility
-is unverified. A short measured benchmark will decide whether to train locally
-or move the same scripts to Colab. No Colab units have been used.
+The RTX 3050 Ti Laptop GPU has 4 GiB VRAM and working CUDA/BF16. Both full and
+LoRA pilots completed two optimiser steps at batch 1, accumulation 2 and 384/256
+source/target caps without OOM. Sampled whole-device peaks were 1,845/975 MiB
+respectively; all three modes generated on the same eight development IDs.
+These short pilots do not establish sustained throughput or model quality.
+Evidence is stored locally under `runs/empirical-20261019/`, with data audits in
+`data/prepared/`; neither directory is committed. No Colab units have been used.
 
 ## References
 
