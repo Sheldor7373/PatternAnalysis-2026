@@ -47,6 +47,16 @@ class MappingTests(unittest.TestCase):
         self.assertFalse(any(result["eligible_mask"][:21]))
         self.assertFalse(result["eligible_mask"][-1])
 
+    def test_successful_trailing_whitespace_overhang_preserves_raw_offsets(self):
+        offsets = [[0,2],[2,5],[5,6],[0,0]]
+        before = copy.deepcopy(offsets)
+        result = map_source_span("X\nNo .", 2, [0,2], [7,8,9,1], offsets, [True]*4, [0,1,2])
+        self.assertEqual(result["token_span"], [1,2])
+        self.assertEqual(offsets, before)
+        self.assertEqual(result["mapping"]["boundary_exceptions"], [{"token_index": 1, "token_id": 8,
+            "raw_offset": [2,5], "boundary": "stop", "outside_char_span": [4,5],
+            "outside_text": " ", "inside_span_text": "No"}])
+
     def test_prompt_letter_or_punctuation_and_report_punctuation_overhang_rejected(self):
         for start in (94,95):  # prompt y/colon as well as newline
             offsets = copy.deepcopy(OFFSETS); offsets[21][0] = start
