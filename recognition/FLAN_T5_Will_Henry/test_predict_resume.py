@@ -105,6 +105,26 @@ class PredictionResumeTests(unittest.TestCase):
             self.assertEqual(result['examples'],5)
             self.assertEqual(len((Path(args.output)/'predictions.jsonl').read_text().splitlines()),5)
 
+    def test_development_manifest_is_labelled_as_pilot_even_without_limit(self):
+        with tempfile.TemporaryDirectory(dir=ModelTests.path) as folder, redirect_stdout(io.StringIO()):
+            root=Path(folder)
+            args=self.arguments(root,root/'pilot')
+            args.evaluation_role='development-pilot'
+            result=predict.main(args)
+            self.assertEqual(result['evaluation_role'],'development-pilot')
+            self.assertIn('not final validation',result['evaluation_scope'])
+
+    def test_final_role_rejects_incomplete_or_limited_manifest(self):
+        with tempfile.TemporaryDirectory(dir=ModelTests.path) as folder, redirect_stdout(io.StringIO()):
+            root=Path(folder)
+            for limit in (None,3):
+                args=self.arguments(root,root/('invalid-'+str(limit)))
+                args.evaluation_role='final-validation'
+                args.limit=limit
+                with self.assertRaisesRegex(ValueError,'all 10000'):
+                    predict.main(args)
+                self.assertFalse((Path(args.output)/'metrics.json').exists())
+
 
 if __name__=='__main__':
     unittest.main()

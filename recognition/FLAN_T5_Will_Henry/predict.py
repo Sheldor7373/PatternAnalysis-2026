@@ -38,6 +38,8 @@ def generate(args, run):
     rows = select_rows(read_jsonl(args.manifest), args.limit, args.seed)
     if not rows:
         raise ValueError("Empty input manifest")
+    if args.evaluation_role == "final-validation" and (args.limit is not None or len(rows) != 10000):
+        raise ValueError("Final-validation role requires all 10000 reports and no --limit")
     producer = environment(device)
     if args.checkpoint:
         checkpoint = resolve_checkpoint(args.checkpoint)
@@ -56,6 +58,7 @@ def generate(args, run):
                   "sampling": False, "seed": args.seed, "visible_input_includes_prompt": True}
     code = Path(__file__).parent
     identity = {"model": model_identity, "manifest_sha256": sha256(args.manifest),
+                "evaluation_role": args.evaluation_role,
                 "selected_ids_sha256": selected_ids_sha256, "generation": generation,
                 "batch_size": args.batch_size, "precision": args.precision, "device": str(device),
                 "packages": producer["packages"],
@@ -108,10 +111,13 @@ def generate(args, run):
     capped_outputs = sum(batch["outputs_without_eos"] for batch in run.batches)
     peaks = {key: max((batch[key] for batch in run.batches if batch.get(key) is not None), default=None)
              for key in ("peak_allocated_mib", "peak_reserved_mib")}
+    scopes = {"development-pilot": "development-only pilot; not final validation",
+              "final-validation": "official held-out validation; all 10000 reports",
+              "custom": "complete manifest" if args.limit is None else "sampled pilot; not final evaluation"}
     metrics = {"rouge": score_predictions(predictions), "examples": len(rows), "manifest": str(args.manifest),
                "manifest_sha256": sha256(args.manifest),
                "selected_ids_sha256": selected_ids_sha256,
-               "evaluation_scope": "complete manifest" if args.limit is None else "sampled pilot; not final evaluation",
+               "evaluation_scope": scopes[args.evaluation_role], "evaluation_role": args.evaluation_role,
                "model": run.metadata["model"], "generation": generation,
                "truncated_inputs": truncated_inputs, "outputs_without_eos": capped_outputs,
                "wall_seconds": elapsed, "generation_seconds": sum(latencies),
@@ -151,6 +157,8 @@ def parser():
     p.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
     p.add_argument("--resume", action="store_true", help="Verify and continue completed batches in this output directory")
     p.add_argument("--max-minutes", type=float, help="Pause after a committed batch; loading/scoring excluded; may be changed on resume")
+    p.add_argument("--evaluation-role", choices=["custom", "development-pilot", "final-validation"], default="custom",
+                   help="Explicit result scope; final-validation requires the complete 10000-report manifest")
     return p
 
 
