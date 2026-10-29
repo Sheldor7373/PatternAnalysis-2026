@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">FLAN-T5 radiology rewrite and adaptation paths</title>
+  <desc id="desc">A task prompt and report are tokenised, encoded by eight Transformer blocks, and decoded autoregressively by eight decoder blocks. Training predicts reference tokens with masked cross-entropy. The comparison uses frozen weights, full fine-tuning or query/value LoRA adapters.</desc>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker></defs>
+  <rect width="1200" height="430" fill="#fff"/>
+  <g font-family="Arial,sans-serif" fill="#172033">
+    <text x="40" y="40" font-size="24" font-weight="bold">One model backbone, three adaptation choices</text>
+    <g stroke="#7996b5" stroke-width="1.5" fill="#edf4fb">
+      <rect x="40" y="75" width="240" height="130" rx="12"/>
+      <rect x="330" y="75" width="240" height="130" rx="12"/>
+      <rect x="620" y="75" width="240" height="130" rx="12"/>
+      <rect x="910" y="75" width="250" height="130" rx="12"/>
+    </g>
+    <g font-size="19" text-anchor="middle">
+      <text x="160" y="108" font-weight="bold">Prompt + source report</text>
+      <text x="160" y="142">SentencePiece tokens</text><text x="160" y="173">Source cap: 384</text>
+      <text x="450" y="108" font-weight="bold">Encoder × 8</text>
+      <text x="450" y="142">Bidirectional attention</text><text x="450" y="173">Report representation</text>
+      <text x="740" y="108" font-weight="bold">Decoder × 8</text>
+      <text x="740" y="142">Causal + cross attention</text><text x="740" y="173">Next-token probabilities</text>
+      <text x="1035" y="108" font-weight="bold">Plain-language draft</text>
+      <text x="1035" y="142">Greedy; EOS or cap 256</text><text x="1035" y="173">Source-grounded review</text>
+    </g>
+    <g stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"><path d="M 283 140 H 323"/><path d="M 573 140 H 613"/><path d="M 863 140 H 903"/></g>
+    <rect x="330" y="230" width="530" height="65" rx="10" fill="#f2f3f5" stroke="#c5cad2"/>
+    <text x="595" y="256" text-anchor="middle" font-size="18">Training: gold reference prefix → next-token loss</text>
+    <text x="595" y="282" text-anchor="middle" font-size="17">Cross-entropy excludes labels masked as −100</text>
+    <g stroke="#c5cad2" fill="#f8fafc"><rect x="40" y="330" width="340" height="68" rx="10"/><rect x="430" y="330" width="340" height="68" rx="10"/></g>
+    <rect x="820" y="330" width="340" height="68" rx="10" fill="#edf7f0" stroke="#76a88a"/>
+    <g text-anchor="middle" font-size="18"><text x="210" y="357" font-weight="bold">Frozen baseline</text><text x="210" y="383">0 trainable parameters</text><text x="600" y="357" font-weight="bold">Full fine-tuning</text><text x="600" y="383">Update all 76.96M parameters</text><text x="990" y="357" font-weight="bold">LoRA at attention q / v</text><text x="990" y="383">Frozen base + 344,064 trainable</text></g>
+  </g>
+</svg>
