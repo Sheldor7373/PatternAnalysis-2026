@@ -8,15 +8,11 @@ from pathlib import Path
 import subprocess
 import time
 
+from status_io import atomic_json
+
 
 def now():
     return datetime.now(timezone.utc).isoformat()
-
-
-def atomic_json(path, value):
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2), encoding="utf-8")
-    temporary.replace(path)
 
 
 def gpu_sample():

@@ -20,14 +20,13 @@ from dataset import ReportDataset, read_jsonl, select_rows, write_json
 from modules import MODEL, RadiologySimplifier, choose_device, load_checkpoint
 from runtime import append_jsonl, environment, memory_stats, precision_context, reset_memory, set_seed, sha256, synchronise
 from checkpoint_storage import publish_checkpoint, resolve_checkpoint
+from status_io import atomic_json
 from training_control import selection_point, update_selection, validate_best_reference
 from training_transition import RemainingBatches, checkpoint_cursor, transition_policy, lr_factor, validate_arguments
 
 
 def atomic_status(output, value):
-    temporary = output / "status.json.tmp"
-    temporary.write_text(json.dumps(value, indent=2), encoding="utf-8")
-    temporary.replace(output / "status.json")
+    atomic_json(output / "status.json", value)
 
 
 def evaluate_loss(model, loader, device, precision):
@@ -117,7 +116,7 @@ def main(args):
                       "cursor": {"epoch": policy["anchor_epoch"], "next_sample": policy["anchor_offset"],
                                  "consumed_examples": policy["anchor_examples"]},
                       "previous_monitor": state.get("monitor", {}),
-                      "selection_note": "Mixed-batch continuation; same fixed dev rows and epoch-end selection policy"}
+                      "selection_note": "Checkpoint continuation; same fixed dev rows and epoch-end selection policy"}
     if policy:
         total_steps = policy["planned_steps"]
         # LambdaLR.load_state_dict restores counters, not the lambda function.
