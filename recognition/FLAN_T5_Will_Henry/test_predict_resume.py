@@ -2,10 +2,13 @@
 from contextlib import redirect_stdout
 import io
 import json
+import gc
+import shutil
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import torch
 
 from transformers import T5ForConditionalGeneration
 from checkpoint_storage import mark_complete, digest, resolve_checkpoint
@@ -156,6 +159,60 @@ class PredictionResumeTests(unittest.TestCase):
             self.assertEqual(recorded['identity']['model']['checkpoint_completion_sha256'],
                              digest(first/'COMPLETE.json'))
             self.assertEqual(recorded['metadata']['model']['revision'],'main')
+
+    def test_changed_lora_base_weights_refuse_resume_and_restore_can_continue(self):
+        with tempfile.TemporaryDirectory(dir=ModelTests.path) as folder, redirect_stdout(io.StringIO()):
+            root=Path(folder)
+            args=self.arguments(root,root/'result','lora')
+            args.max_minutes=0
+            predict.main(args)
+            originals={path:path.read_bytes() for path in ModelTests.path.iterdir() if path.is_file()}
+            try:
+                base=T5ForConditionalGeneration.from_pretrained(ModelTests.path)
+                with torch.no_grad():
+                    base.shared.weight.add_(1)
+                replacement=root/'changed-base'
+                base.save_pretrained(replacement)
+                # Windows cannot overwrite a safetensors file while a loaded
+                # CPU tensor still maps it. Release test models before copying
+                # the independently saved replacement into this tiny fixture.
+                del base
+                gc.collect()
+                for path in replacement.iterdir():
+                    if path.is_file():
+                        shutil.copyfile(path,ModelTests.path/path.name)
+                args.resume=True
+                args.max_minutes=None
+                with self.assertRaisesRegex(ValueError,'identity changed'):
+                    predict.main(args)
+                self.assertEqual(len(list((Path(args.output)/'batches').glob('*.json'))),1)
+            finally:
+                gc.collect()
+                for path,data in originals.items():
+                    path.write_bytes(data)
+            self.assertEqual(predict.main(args)['examples'],5)
+
+    def test_changed_threads_or_effective_dtype_refuse_resume(self):
+        with tempfile.TemporaryDirectory(dir=ModelTests.path) as folder, redirect_stdout(io.StringIO()):
+            root=Path(folder)
+            args=self.arguments(root,root/'result')
+            args.precision='auto'
+            args.max_minutes=0
+            predict.main(args)
+            args.resume=True
+            args.max_minutes=None
+            args.cpu_threads=2
+            with self.assertRaisesRegex(ValueError,'identity changed'):
+                predict.main(args)
+            args.cpu_threads=1
+            torch.set_num_threads(1)
+            changed=predict.effective_runtime('auto',torch.device('cpu'))
+            changed['effective_precision']='bf16'
+            with patch('predict.effective_runtime',return_value=changed):
+                with self.assertRaisesRegex(ValueError,'identity changed'):
+                    predict.main(args)
+            self.assertEqual(len(list((Path(args.output)/'batches').glob('*.json'))),1)
+            self.assertEqual(predict.main(args)['examples'],5)
 
 
 if __name__=='__main__':

@@ -64,7 +64,11 @@ directories `runs/final/frozen`, `runs/final/full`, `runs/final/lora`.
 Generation now publishes checksum-protected batches. On failure, repeat the
 same command/output with `--resume`; completed batches are verified and skipped.
 Do not change the model, source file, producer code, decoder or batch during a
-final run. A bounded `--max-minutes` session can be resumed with a different
+final run. Keep the same effective precision, device and CPU/tokenizer thread
+settings. Base weight/config/tokenizer artifacts are bound separately from a
+LoRA adapter; local binary shards are included. Set
+`$env:TOKENIZERS_PARALLELISM = "false"` consistently for supervised commands.
+A bounded `--max-minutes` session can be resumed with a different
 time allowance. Inspect `generation_status.json`; partial runs are not final
 metrics. Preserve all successful batches and the only recoverable state.
 

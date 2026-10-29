@@ -46,10 +46,15 @@ class RadiologySimplifier(nn.Module):
         (path / "experiment.json").write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
 
 
-def load_checkpoint(path, device):
+def load_checkpoint(path, device, base_source=None):
     path = resolve_checkpoint(path)
     settings = json.loads((path / "experiment.json").read_text(encoding="utf-8"))
-    model = RadiologySimplifier(settings["model"], settings["revision"], settings["mode"],
+    model_name, revision = settings["model"], settings["revision"]
+    if base_source is not None:
+        if settings["mode"] != "lora":
+            raise ValueError("A base-source binding applies only to adapter checkpoints")
+        model_name, revision = base_source
+    model = RadiologySimplifier(model_name, revision, settings["mode"],
                                settings.get("rank", 8), checkpoint=path).to(device)
     tokenizer = AutoTokenizer.from_pretrained(path)
     return model, tokenizer, settings

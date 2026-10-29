@@ -240,7 +240,12 @@ measured common batch size. Example final invocation:
 Use the same invocation/output folder with `--resume` after an interruption.
 `--max-minutes` can bound a session and pauses after a saved batch; it may change
 on resume. Model, manifest, producer-code identity, decoder, batch and precision
-must match. Completed batches are checksummed and skipped; a failed unpublished
+must match. The identity also binds actual local binary/safetensors shards and
+tokenizer/config files, or the resolved immutable Hub revision. LoRA's external
+base is bound separately from its adapter. Effective BF16/FP32, device
+capability and CPU/tokenizer thread settings must remain consistent so resumed
+resource measurements are not silently labelled with a different runtime.
+Completed batches are checksummed and skipped; a failed unpublished
 batch may be repeated. Final `predictions.jsonl`, `metrics.json` and review
 candidates are produced only after the selected manifest completes. Official
 validation runs omit `--limit`. All three final result sets must match in IDs,

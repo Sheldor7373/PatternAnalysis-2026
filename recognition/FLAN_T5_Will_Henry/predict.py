@@ -15,6 +15,7 @@ from modules import MODEL, RadiologySimplifier, choose_device, load_checkpoint
 from runtime import environment, memory_stats, precision_context, reset_memory, set_seed, sha256, synchronise
 from checkpoint_storage import resolve_checkpoint
 from prediction_storage import PredictionRun
+from inference_identity import bind_source, verify_source, effective_runtime
 
 
 def main(args):
@@ -26,16 +27,27 @@ def generate(args, run):
     set_seed(args.seed)
     torch.set_num_threads(args.cpu_threads)
     device = choose_device(args.device)
+    runtime = effective_runtime(args.precision, device)
     output = Path(args.output)
+    base = None
     if args.checkpoint:
         # Bind a mutable best/latest alias once. Loading and recorded identity
         # must refer to this same immutable directory if the alias later moves.
         checkpoint = resolve_checkpoint(args.checkpoint)
-        model, tokenizer, settings = load_checkpoint(checkpoint, device)
+        checkpoint_settings = json.loads((checkpoint / "experiment.json").read_text(encoding="utf-8"))
+        if checkpoint_settings["mode"] == "lora":
+            base = bind_source(checkpoint_settings["model"], checkpoint_settings["revision"])
+            model, tokenizer, settings = load_checkpoint(checkpoint, device,
+                                                        base_source=(base["source"], base["revision"]))
+        else:
+            model, tokenizer, settings = load_checkpoint(checkpoint, device)
     else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model, revision=args.revision)
-        model = RadiologySimplifier(args.model, args.revision, mode="frozen").to(device)
-        settings = {"model": args.model, "mode": "frozen", "revision": model.model.config._commit_hash or args.revision}
+        base = bind_source(args.model, args.revision)
+        tokenizer = AutoTokenizer.from_pretrained(base["source"], revision=base["revision"])
+        model = RadiologySimplifier(base["source"], base["revision"], mode="frozen").to(device)
+        settings = {"model": args.model, "mode": "frozen", "revision": base["revision"]}
+    if base is not None:
+        verify_source(base)
     model.eval()
     model.model.config.use_cache = True
     rows = select_rows(read_jsonl(args.manifest), args.limit, args.seed)
@@ -46,14 +58,10 @@ def generate(args, run):
     producer = environment(device)
     if args.checkpoint:
         model_identity = {"checkpoint_completion_sha256": sha256(checkpoint / "COMPLETE.json")}
+        if base is not None:
+            model_identity["adapter_base"] = base["identity"]
     else:
-        local = Path(args.model)
-        model_identity = {"model": settings["model"], "revision": settings["revision"]}
-        if local.is_dir():
-            model_identity["local_files_sha256"] = {path.name: sha256(path) for path in sorted(local.iterdir())
-                                                    if path.is_file() and path.suffix in {".json", ".safetensors", ".model"}}
-        elif settings["revision"] == "main":
-            raise ValueError("Remote baseline must resolve to an immutable model revision")
+        model_identity = base["identity"]
     selected_ids_sha256 = hashlib.sha256("\n".join(row["id"] for row in rows).encode()).hexdigest()
     generation = {"prompt": PROMPT, "source_length": args.source_length,
                   "max_new_tokens": args.target_length, "beams": args.beams,
@@ -63,10 +71,12 @@ def generate(args, run):
                 "evaluation_role": args.evaluation_role,
                 "selected_ids_sha256": selected_ids_sha256, "generation": generation,
                 "batch_size": args.batch_size, "precision": args.precision, "device": str(device),
+                "effective_runtime": runtime,
                 "packages": producer["packages"],
                 "code_sha256": {name: sha256(code / name) for name in
-                                ("predict.py", "prediction_storage.py", "modules.py", "dataset.py", "metrics.py", "runtime.py")}}
+                                ("predict.py", "prediction_storage.py", "inference_identity.py", "modules.py", "dataset.py", "metrics.py", "runtime.py")}}
     run.configure(identity, {"model": settings, "environment": producer,
+                             "effective_runtime": runtime,
                              "parameters": model.parameter_counts()}, rows)
     reset_memory(device)
     start = time.perf_counter()
@@ -79,7 +89,7 @@ def generate(args, run):
                            return_tensors="pt").to(device)
         synchronise(device)
         tick = time.perf_counter()
-        with torch.inference_mode(), precision_context(device, args.precision):
+        with torch.inference_mode(), precision_context(device, runtime["effective_precision"]):
             generated = model.model.generate(**tokens, max_new_tokens=args.target_length,
                                              num_beams=args.beams, do_sample=False)
         synchronise(device)
@@ -128,7 +138,8 @@ def generate(args, run):
                "median_batch_latency_seconds": statistics.median(latencies),
                "latency_note": "Generation time includes each session's first batch. Wall time sums batch tokenisation/generation/decoding; excludes loading, persistence, scoring and gaps between sessions.",
                "precision": args.precision, **run.metadata["parameters"], **peaks,
-               "environment": run.metadata["environment"], "resumable_batch_count": len(run.batches)}
+               "environment": run.metadata["environment"], "effective_runtime": run.metadata["effective_runtime"],
+               "model_identity": run.identity["model"], "resumable_batch_count": len(run.batches)}
     write_json(output / "metrics.json", metrics)
     flagged = []
     for row in predictions:
