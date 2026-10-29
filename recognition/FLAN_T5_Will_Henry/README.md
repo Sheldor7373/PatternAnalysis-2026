@@ -12,13 +12,12 @@ evidence can support.
 
 ## Current experimental status
 
-**Report in progress, 29 October 2026. Final held-out results are pending.**
-Full fine-tuning and LoRA have both completed three epochs and 292,233 training
-exposures. Full tuning finished on 29 October at update 93,449; its final data
-cursor, optimizer/scheduler/RNG state and checkpoint payload hashes were verified
-before evaluation. The frozen model requires no training.
-Development monitoring, feasibility pilots and final evaluation are identified
-separately throughout this report. Empty final-result cells do not mean zero.
+**Completed comparison, 29 October 2026 (UTC).** Full fine-tuning and LoRA
+each completed three epochs and 292,233 training exposures. All three models
+were evaluated on the same 10,000 held-out reports. Checkpoint payloads, paired
+IDs, visible inputs and final exports were verified. The results support a
+prototype comparison, not clinical deployment or calibrated confidence in an
+individual rewrite. The frozen model requires no task-specific training.
 
 The practical feasibility check-off has been reported complete by the author.
 The one-page review presented on 29 October is reproduced below.
@@ -56,7 +55,11 @@ adds low-rank updates to attention query and value projections [3]:
 
 $$W'=W+\frac{\alpha}{r}BA,\qquad r=8,\quad\alpha=16.$$
 
-Only A and B are trained; adapter dropout is 0.05. This reduces trainable
+The saved adapter has 48 A matrices of shape 8 x 512 and 48 B matrices of
+shape 384 x 8: `48 x 8 x (512 + 384) = 344,064` parameters. Query/value
+adaptation spans eight encoder self-attention, eight decoder self-attention
+and eight decoder cross-attention modules. Only A and B are trained;
+adapter dropout is 0.05. This reduces trainable
 parameters and optimizer state, but the frozen base still occupies memory and
 must participate in forward/backward computation. Fewer trainable parameters
 alone do not guarantee faster generation or better factual faithfulness.
@@ -75,7 +78,7 @@ reference rewrites for the final comparison. The challenge test set is unused.
 Normalised text is used for overlap checks; the model receives the report text
 with its negation and uncertainty wording preserved. Available report/image
 identities can be checked, but the data supplies no patient IDs, so these checks
-do not establish patient independence. Duplicate/conflicting reference rewrites
+do not establish patient independence. Repeated inputs and differing reference wordings
 are counted in the local audit and are a limitation of reference-based scoring.
 Data hygiene and length audits are distinct from model selection: validation is
 not used to select checkpoints, decoding or inference batch size.
@@ -110,7 +113,8 @@ exact shuffled-data cursor. The next LR is preserved, then decay is anchored to
 remaining example exposure. These batch transitions change gradient noise and
 update frequency; the comparison must disclose that confound even if both runs
 finish with the same number of exposures. Three epochs are this experiment's
-planned budget, not a universal requirement for effective adaptation.
+planned budget, not a universal requirement for effective adaptation. Full used
+93,449 optimizer updates versus 77,434 for LoRA despite equal total exposure.
 
 | Recorded development evidence | Exposures / scope | Token loss |
 |---|---|---:|
@@ -133,71 +137,201 @@ new exposure.
 sampled device telemetry are retained locally; training data and weights are
 excluded from Git. Lines remain separate across process/session boundaries.*
 
-## Final held-out comparison — pending
+## Final held-out comparison
 
-The final recipe was locked before held-out generation: immutable selected
-checkpoints, batch 64, BF16, greedy generation (`beams=1`, no sampling), source
-cap 384, output cap 256 and seed 3710. The same prompt, validation IDs, reference
-handling and effective runtime apply to all three models. A separate 64-report
-development timing pilot tested batches 4/8/16/32/64 without quality-based
-selection; batch 64 was fastest and retained at least 2,391 MiB sampled device
-headroom. BF16 greedy outputs can change with batch shape, including meaningful
-wording changes, so the chosen batch is fixed on every final run and resume.
+The recipe was locked before held-out generation: selected immutable
+checkpoints, batch 64, BF16, greedy decoding (`beams=1`, no sampling), source
+cap 384, output cap 256 and seed 3710. Prompt, validation IDs, full references,
+effective runtime and all eight producer-file hashes match across models.
+The source cap includes the prompt. A separate 64-report development timing
+pilot tested batches 4/8/16/32/64 without quality-based selection. Batch 64 was
+fastest tested, with at least 2,391 MiB sampled device headroom. BF16 greedy
+outputs can change with batch shape, including meaningful wording changes;
+the final batch and runtime were therefore fixed, including on resume.
 
 | Model | Validation reports | ROUGE-1 F1 | ROUGE-2 F1 | ROUGE-L F1 | ROUGE-Lsum F1 |
 |---|---:|---:|---:|---:|---:|
-| Frozen FLAN-T5-small | Pending | Pending | Pending | Pending | Pending |
-| Full fine-tuning | Pending | Pending | Pending | Pending | Pending |
-| LoRA | Pending | Pending | Pending | Pending | Pending |
+| Frozen FLAN-T5-small | 10,000 | 0.26450 | 0.09638 | 0.23524 | 0.24556 |
+| Full fine-tuning | 10,000 | 0.73844 | 0.55926 | 0.68952 | 0.70882 |
+| LoRA | 10,000 | 0.61454 | 0.39429 | 0.55197 | 0.57977 |
 
-ROUGE is the arithmetic mean of per-report F1 values. Stemming is enabled;
-explicit sentence boundaries support ROUGE-Lsum. Lexical overlap can reward
-fluent wording without detecting a changed clinical fact [4]. Any paired
-uncertainty interval describes an aggregate metric comparison, not confidence
-that an individual summary is correct.
+![Held-out ROUGE comparison](figures/heldout-rouge.png)
 
-| Model | Total parameters | Trainable parameters | Training time | Peak training VRAM | Inference latency / tokens/s |
-|---|---:|---:|---|---|---|
-| Frozen | 76,961,152 | 0 | No adaptation | Not applicable | Pending matched evaluation |
-| Full | 76,961,152 | 76,961,152 | Pending resource collation | Pending resource collation | Pending matched evaluation |
-| LoRA | 77,305,216 | 344,064 | Pending final resource collation | Pending final resource collation | Pending matched evaluation |
+ROUGE is the arithmetic mean of per-report F1 values on scale 0-1. Stemming is
+enabled; explicit sentence boundaries support union-LCS ROUGE-Lsum. Full
+references are scored even where training targets or visible sources exceeded
+their caps. Matching words do not establish factual faithfulness [4].
 
-Report allocated/reserved Torch peaks separately from sampled whole-device
-memory. Generation timing includes each session's first batch; the resumable
-driver sums per-batch tokenisation/generation/decoding time and reports GPU
-generation time separately. Loading, persistence, scoring and paused gaps are
-excluded from those fields. Collate historical failed/replayed compute and
-resumed training sessions explicitly rather than counting only the last session.
-The existing eight-report, two-update pilots remain feasibility evidence and
-will not be substituted for these final results.
+### Paired uncertainty and where performance weakens
 
-## Mandatory clinical safety autopsies — pending outputs
+All 10,000 original rows retain their weighting. They form 7,599 observable
+report/image components; the largest has 289 rows. There are 283 normalised
+input groups with multiple reference wordings, which need not be contradictory.
+The paired percentile bootstrap resamples whole components with shared draws,
+then recomputes row-weighted differences (1,000 draws; seed 3710).
 
-The final report will analyse 3–5 actual held-out failures. Each case needs a
-minimal source excerpt, the actual outputs, source evidence and a discussion of
-factual faithfulness, acute-finding completeness and layperson readability.
-Negation/certainty changes, truncation and capped generation will be considered
-where relevant. Selected failures cannot establish the population error rate.
+| ROUGE-L difference | Point difference | 95% percentile interval |
+|---|---:|---:|
+| Full minus frozen | 0.45427 | [0.43075, 0.48046] |
+| LoRA minus frozen | 0.31673 | [0.29240, 0.34313] |
+| Full minus LoRA | 0.13755 | [0.12045, 0.16223] |
 
-| Case | Actual source/output evidence | Confirmed failure and likely trigger | Readability trade-off |
-|---|---|---|---|
-| 1 | Pending final generation and review | Pending | Pending |
-| 2 | Pending final generation and review | Pending | Pending |
-| 3 | Pending final generation and review | Pending | Pending |
-| 4–5, if informative | Pending final generation and review | Pending | Pending |
+Intervals describe evaluation-sample variation conditional on these trained
+models, not training-seed uncertainty, patient independence or per-rewrite
+confidence. No repeated-seed experiment was run. Different batch transitions
+also prevent attributing the entire full-versus-LoRA gap to adaptation capacity.
 
-`review_candidates.jsonl` and `research_diagnostics.py` help find cases. Their
-small concept/negation regexes have incomplete vocabulary and scope handling;
-flags are review prompts, not verified errors. Human/source-grounded review is
-still required. No automated clinical judge or calibrated confidence score has
-been validated in this experiment.
+| Source length (whitespace words) | Reports | Frozen ROUGE-L | Full ROUGE-L | LoRA ROUGE-L |
+|---|---:|---:|---:|---:|
+| 0-50 words | 9,188 | 0.24077 | 0.69806 | 0.56207 |
+| 51-100 words | 621 | 0.19950 | 0.61836 | 0.46571 |
+| >100 words | 191 | 0.08564 | 0.51010 | 0.34655 |
 
-**Manager recommendation: pending the final comparison and case audit.** The
-recommendation must state whether adaptation's measured benefit justifies its
-cost, identify unsupported use, and specify concrete review/guardrail needs.
-Candidate requirements include preserving uncertainty, checking critical
-findings against the source, surfacing truncated/capped cases and routing
-outputs for review. Their effectiveness must not be claimed without evaluation.
+The aggregate is dominated by short reports: 9,188 have at most 50 words and
+only 191 exceed 100. Full tuning leads in every reported length bin, but its
+ROUGE-L falls from 0.69806 to 0.51010 between those extremes. Length, source
+domain and case difficulty are entangled; this is descriptive stratification,
+not a causal length effect. Source counts are PadChest 7,824, BIMCV-COVID19
+2,042 and OpenI 134, limiting broad cross-domain claims.
+
+### Resources and practical trade-offs
+
+| Model | Total parameters | Trainable parameters | Training lineage time | Peak training allocated / reserved MiB | Sampled training device MiB |
+|---|---:|---:|---:|---:|---:|
+| Frozen | 76,961,152 | 0 | No task adaptation | Not applicable | Not applicable |
+| Full | 76,961,152 | 76,961,152 | 13.60 h | 2687.49 / 3080 | 3266 |
+| LoRA | 77,305,216 | 344,064 | 12.16 h | 1893.19 / 2226 | 2337 |
+
+Training lineage time includes development evaluation and checkpointing, while
+excluding paused calendar time. It is not total project compute: logged full
+process spans including replay total at least 13.87 h, versus 13.60 h along the
+retained checkpoint lineage. LoRA's retained lineage is 12.16 h; a superseded
+trial consumed additional time. Whole-device samples can miss peaks and include
+other processes. Foundation-model pretraining cost is outside this comparison.
+
+| Model | Batch wall / observer session seconds | Median batch generation seconds | Amortised batch wall ms/report | Generated tokens/s | Inference allocated / reserved / sampled-device MiB |
+|---|---:|---:|---:|---:|---:|
+| Frozen | 587.63 / 620.19 | 4.580 | 58.76 | 663.72 | 1256.31 / 2624 / 2727 |
+| Full | 697.12 / 740.42 | 4.528 | 69.71 | 709.04 | 1288.93 / 2530 / 2633 |
+| LoRA | 966.33 / 1011.05 | 6.200 | 96.63 | 503.94 | 1257.84 / 2462 / 2565 |
+
+Batch wall sums tokenisation, synchronised generation and decoding, including
+each session's first batch; it excludes loading, persistence, scoring and paused
+gaps. Observer session time includes those session costs. The median is per
+batch, not individual-request latency; amortised ms/report is a throughput
+quantity. Generated-token counts exclude padding/decoder start and include EOS.
+Outputs average 38.68/49.01/48.41 tokens for frozen/full/LoRA, so reports/s alone
+does not isolate model speed. Thermal conditions varied (sampled maxima
+75/69/69 degrees C); these are observed costs, not a controlled speedup claim.
+
+LoRA trains about 0.45% of its parameters and reduced recorded allocated
+training memory, but the base weights/activations remain. Its adapters were
+unmerged during inference, adding operations; lower trainable count did not
+produce faster generation here. Both adapted models fitted this 4 GiB GPU.
+
+### Output diagnostics
+
+| Model | Truncated inputs | Outputs without EOS | Empty outputs | Within-output repetition candidates |
+|---|---:|---:|---:|---:|
+| Frozen | 52 | 119 | 27 | 90 |
+| Full | 52 | 115 | 0 | 29 |
+| LoRA | 52 | 195 | 0 | 157 |
+
+Empty and unfinished outputs were retained and scored; no held-out setting was
+changed to repair them. Repetition candidates require at least 24 words, a
+four-word phrase repeated at least three times and duplicate four-gram fraction
+at least 0.30. This is a review heuristic, not verified error prevalence.
+Repeated complete outputs can also reflect repeated or normal input reports.
+
+The final manifest SHA-256 is
+`f3707225785622f24c4b60b412f364a26453c3d4cf92c5d9381e106a5e0d01a0`.
+Producer code corresponds to commit `860d28f`; later report-only commits do
+not change those eight source hashes. Local checksum batches, metrics, bootstrap
+results and immutable checkpoint receipts retain the full numerical provenance.
+
+## Source-grounded failure autopsies
+
+These five failure-selected cases cover different mechanisms, rather than
+estimating an error rate. Original source, tokenizer-visible source, full
+reference and all three saved outputs were checked. The input/output summaries
+below are minimal paraphrases, not substitute inputs used for a new experiment.
+Row IDs refer to the pinned official validation split. The pinned dataset card
+does not declare a licence; source datasets retain research/sharing conditions
+[7]. Original reports, images and bulk predictions remain local.
+
+### validation:69: Entity-attribute misbinding
+
+**Input summary (PadChest; paraphrase):** The source separately describes an elongated aorta, an enlarged heart and a right basal infiltrate compatible with infection.
+
+**Observed outputs:** LoRA retains heart enlargement but additionally turns the right lung finding into lung enlargement. Full tuning preserves the relevant infiltrate/infection relationship; frozen largely copies the technical source and task instruction.
+
+**Trigger and response:** The error fits entity-attribute misbinding across adjacent findings: a fluent sentence attaches an enlargement property to the wrong organ. Capacity, attention and reference-noise contributions were not isolated. Check each finding against its anatomical subject; fluency and shared disease words do not establish the correct relation.
+
+### validation:164: Spatial negation and modifier scope
+
+**Input summary (OpenI; paraphrase):** The source describes normal central airways, patchy lung densities, suspected acute pneumonia and no pneumothorax.
+
+**Observed outputs:** LoRA changes the normal-airway statement into normal lungs and expresses the absent extra-pulmonary air finding as absence of air inside the lungs. Full preserves the relevant spatial negation. Frozen returns mainly the concluding impression, omitting other supplied findings.
+
+**Trigger and response:** This is a relation/scope error, not merely a missing negation token. A normality modifier migrates between structures, and a preposition changes what is being negated. The entire source was visible. Review the negated concept together with its anatomical location; a bag-of-concepts match can miss this failure.
+
+### validation:206: Internal contradiction and anatomical substitution
+
+**Input summary (OpenI; paraphrase):** The source lists a possible right-middle-lobe process, explicitly excludes pleural fluid and notes a raised right hemidiaphragm.
+
+**Observed outputs:** LoRA first adds a small fluid collection and then denies fluid in the next sentence; it also substitutes the right middle lung region for the elevated diaphragm. Full preserves the relevant uncertainty and negation. Frozen keeps only the possible lung-process sentence.
+
+**Trigger and response:** Autoregressive token prediction does not enforce cross-sentence consistency or correct anatomical binding. All relevant statements were visible; the reference also preserves them. No causal decoder/adapter ablation was run. Check for contradictory positive/negative claims and align each anatomical finding to the source.
+
+### validation:3207: Unsupported reassurance and certainty inflation
+
+**Input summary (BIMCV-COVID19; paraphrase):** The source states that acquisition technique reduces diagnostic sensitivity and describes a possible small upper-right opacity.
+
+**Observed outputs:** Full tuning dismisses the acquisition limitation and turns the possible opacity into an unqualified finding. LoRA also drops the opacity qualifier and omits part of the acquisition caveat. Frozen enters a repetitive loop rather than providing a useful rewrite.
+
+**Trigger and response:** This is unfaithful simplification despite a fully visible input. Full achieves ROUGE-L 0.678 on this case, showing that many matching words can coexist with a changed clinical assertion. A learned reassuring style is a hypothesis, not a proven cause. Preserve modality and uncertainty qualifiers explicitly; lexical overlap and completed text are insufficient safety checks.
+
+### validation:195: Separate source and generation budget failures
+
+**Input summary (BIMCV-COVID19; paraphrase):** A long multi-region CT report contains thoracic, abdominal and bone findings; some later findings lie beyond the visible input budget.
+
+**Observed outputs:** The prompted source has 520 tokens but only 384 are visible. Full and LoRA both reach 256 generated tokens without EOS and stop unfinished. Frozen instead links the cut-off organ-name fragment to a lung-tumour label and ends with EOS.
+
+**Trigger and response:** Unseen late findings are an input-visibility limitation, not evidence that the decoder ignored available text. Both adapted outputs also omit available later content because the generation budget is exhausted. The frozen association is an additional unsupported content failure; truncation as its trigger remains a hypothesis. Route truncated or unfinished reports for review; sentence-aware segmentation and larger budgets require development testing. EOS alone cannot certify fidelity.
+
+Across these cases, frozen copies technical text or loops; full usually explains
+terms more clearly, but still retains jargon such as the specialised nodule and
+lung-region terminology in case 195. LoRA also retains jargon and awkward
+phrasing; its contradictory sentences in case 206 undermine clarity. Full's
+fluent reassurance in case 3207 illustrates that easier wording can be less
+faithful. These are qualitative observations, not measured patient comprehension
+or a collected numerical readability score.
+
+### What the flags and scores cannot tell us
+
+The full model's regex flags include false positives: `validation:171` preserves
+the source negation, but the limited matcher misses a negative construction in
+the output. `validation:127` preserves the source's questionable fracture, but
+the matcher does not recognise the source uncertainty cue. Therefore the count
+of flagged concepts is not a clinical-error rate. The rules have incomplete
+synonyms, negation scope and anatomical relations. Source-grounded textual
+review is also not independent radiologist adjudication.
+
+**Manager recommendation:** prefer full tuning for further prototype work:
+it has the strongest overlap scores and fitted the local GPU. LoRA offers a
+large trainable-parameter reduction and lower recorded training memory, but
+lost quality and was slower in this unmerged inference setup. None should
+produce unreviewed patient-facing text: even full tuning altered uncertainty
+and acquisition limitations. Empty/non-EOS outputs and truncated sources need
+explicit review routing; all critical facts, negation and uncertainty need
+source comparison before release. EOS is a completion signal, not a fidelity
+certificate, as `validation:195` illustrates.
+
+Next development priorities are sentence-aware long-report handling and a
+labelled source-grounded error audit, followed by calibrated review thresholds
+on development data. A future confidence score would need validation against
+those factual-error labels; ROUGE is not such a score. These controls have not
+been clinically validated or implemented as a deployment safety system here.
 
 ## Running the project
 
@@ -359,18 +493,24 @@ and model-reload tests, optimizer/RNG/cursor continuation tests, bounded GPU
 feasibility measurements and retained training logs. Resumable inference was
 tested on tiny offline CPU frozen/full/LoRA models, including failures and
 unchanged output/order after resume. The author remains responsible for reviewing
-the code and report. Final held-out metrics and the clinical case audit are
-explicitly pending; this draft does not claim that tests substitute for that
-review or that clinical safety has been established.
+the code and report. The final 30,000 outputs were checksum/identity audited;
+per-example scoring was recomputed, report/image-group bootstrap intervals were
+checked, and five cases were compared to original/visible source and reference.
+The implementation passed 131 CPU regression tests before final generation;
+producer source hashes remained unchanged. AI-assisted textual review and tests
+do not substitute for human responsibility or establish clinical safety.
 
 ## Submission completion
 
-Before submission, replace pending results and this progress snapshot with the
-completed evidence, confirm citations and exact commands, and review the final
-scope. Submit a working PR to `shakes76/PatternAnalysis-2026` targeting
-`topic-recognition`, then export the actual README to PDF for Turnitin. The
-later teaching-team code-review response remains separately marked: requested
-changes and replies must be completed within the announced response window.
+Training, all three 10,000-report evaluations, resource summaries and the five
+case autopsies are complete. A PDF export of this saved README is prepared
+separately for Turnitin. Public Git contains code/documentation/figures, not
+datasets or model weights. Final upstream PR creation and Turnitin submission
+remain approval steps: the required working PR must target
+`shakes76/PatternAnalysis-2026` branch `topic-recognition`. The later teaching-team
+code-review response is separately marked; requested changes and replies must
+be completed in its announced response window. No upstream merge or submission
+is claimed here.
 
 ## References
 
@@ -380,6 +520,8 @@ changes and replies must be completed within the announced response window.
 4. Maynez et al. (2020), [On Faithfulness and Factuality in Abstractive Summarization](https://aclanthology.org/2020.acl-main.173/).
 5. [Google FLAN-T5-small model card](https://huggingface.co/google/flan-t5-small), pinned revision `0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab`.
 6. [BioLaySumm 2025 task](https://biolaysumm.org/) and [LaymanRRG dataset][dataset].
+
+7. [Pinned LaymanRRG dataset card](https://huggingface.co/datasets/BioLaySumm/BioLaySumm2025-LaymanRRG-opensource-track/blob/6783ab38f9de28c4372799346f51d3927ae7eb9a/README.md), [PadChest data-use information](https://bimcv.cipf.es/bimcv-projects/padchest/) and [BIMCV-COVID19 data-use information](https://bimcv.cipf.es/bimcv-projects/bimcv-covid19/), checked 29 October 2026.
 
 [dataset]: https://huggingface.co/datasets/BioLaySumm/BioLaySumm2025-LaymanRRG-opensource-track
 [torch-install]: https://pytorch.org/get-started/previous-versions/#v280
