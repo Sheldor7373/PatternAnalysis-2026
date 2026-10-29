@@ -13,8 +13,10 @@ evidence can support.
 ## Current experimental status
 
 **Report in progress, 29 October 2026. Final held-out results are pending.**
-LoRA has completed three epochs. Full fine-tuning is running toward the same
-292,233-example exposure target. The frozen model requires no training.
+Full fine-tuning and LoRA have both completed three epochs and 292,233 training
+exposures. Full tuning finished on 29 October at update 93,449; its final data
+cursor, optimizer/scheduler/RNG state and checkpoint payload hashes were verified
+before evaluation. The frozen model requires no training.
 Development monitoring, feasibility pilots and final evaluation are identified
 separately throughout this report. Empty final-result cells do not mean zero.
 
@@ -115,7 +117,8 @@ planned budget, not a universal requirement for effective adaptation.
 | Untuned checkpoint | Fixed dev256, before adaptation | 2.662897 |
 | LoRA | End of epoch 3; 292,233 training exposures | 1.221684 |
 | Full fine-tuning | Selected epoch-one checkpoint; 97,411 exposures | 0.648476 |
-| Full fine-tuning | Diagnostic snapshot at 11:12 UTC, 29 October; training still active | 0.626071 |
+| Full fine-tuning | Selected epoch-two checkpoint; 194,822 exposures | 0.594326 |
+| Full fine-tuning | Selected epoch-three checkpoint; 292,233 exposures | 0.578559 |
 
 These measurements establish training progress, not final summary quality or
 clinical safety. The loss curve uses cumulative examples seen, divided by
@@ -126,16 +129,20 @@ new exposure.
 
 ![Recorded training and development losses](figures/training-loss-snapshot.png)
 
-*Historical/progress snapshot; replace with the completed run curve before final
-submission. Raw histories, immutable checkpoint checksums and sampled device
-telemetry are retained locally rather than committing training data or weights.*
+*Completed three-epoch histories. Raw logs, immutable checkpoint checksums and
+sampled device telemetry are retained locally; training data and weights are
+excluded from Git. Lines remain separate across process/session boundaries.*
 
 ## Final held-out comparison — pending
 
-Select final immutable checkpoints and a feasible common inference batch using
-development data, then lock the settings. The intended primary decoder is
-deterministic greedy generation (`beams=1`, no sampling), with the same prompt,
-caps, selected validation IDs and reference handling for all three models.
+The final recipe was locked before held-out generation: immutable selected
+checkpoints, batch 64, BF16, greedy generation (`beams=1`, no sampling), source
+cap 384, output cap 256 and seed 3710. The same prompt, validation IDs, reference
+handling and effective runtime apply to all three models. A separate 64-report
+development timing pilot tested batches 4/8/16/32/64 without quality-based
+selection; batch 64 was fastest and retained at least 2,391 MiB sampled device
+headroom. BF16 greedy outputs can change with batch shape, including meaningful
+wording changes, so the chosen batch is fixed on every final run and resume.
 
 | Model | Validation reports | ROUGE-1 F1 | ROUGE-2 F1 | ROUGE-L F1 | ROUGE-Lsum F1 |
 |---|---:|---:|---:|---:|---:|
@@ -152,7 +159,7 @@ that an individual summary is correct.
 | Model | Total parameters | Trainable parameters | Training time | Peak training VRAM | Inference latency / tokens/s |
 |---|---:|---:|---|---|---|
 | Frozen | 76,961,152 | 0 | No adaptation | Not applicable | Pending matched evaluation |
-| Full | 76,961,152 | 76,961,152 | Pending completion | Pending completion | Pending matched evaluation |
+| Full | 76,961,152 | 76,961,152 | Pending resource collation | Pending resource collation | Pending matched evaluation |
 | LoRA | 77,305,216 | 344,064 | Pending final resource collation | Pending final resource collation | Pending matched evaluation |
 
 Report allocated/reserved Torch peaks separately from sampled whole-device
