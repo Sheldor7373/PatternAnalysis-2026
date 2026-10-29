@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from transformers import T5ForConditionalGeneration
-from checkpoint_storage import mark_complete
+from checkpoint_storage import mark_complete, digest, resolve_checkpoint
 from dataset import write_jsonl
 from modules import RadiologySimplifier
 from test_model import ModelTests
@@ -124,6 +124,38 @@ class PredictionResumeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'all 10000'):
                     predict.main(args)
                 self.assertFalse((Path(args.output)/'metrics.json').exists())
+
+    def test_checkpoint_alias_movement_cannot_change_loaded_model_identity(self):
+        with tempfile.TemporaryDirectory(dir=ModelTests.path) as folder, redirect_stdout(io.StringIO()):
+            root=Path(folder)
+            args=self.arguments(root,root/'result','full')
+            first=Path(args.checkpoint)
+            other=root/'other-checkpoint'
+            model=RadiologySimplifier(str(ModelTests.path),mode='full')
+            model.save(other,ModelTests.tokenizer,
+                       {'model':str(ModelTests.path),'revision':'other-pinned-revision','mode':'full'})
+            mark_complete(other)
+            pointer=root/'latest.json'
+            def point_to(path):
+                pointer.write_text(json.dumps({'directory':path.name,
+                    'completion_sha256':digest(path/'COMPLETE.json')}))
+            point_to(first)
+            args.checkpoint=str(root/'latest')
+            real_load=predict.load_checkpoint
+            loaded=[]
+            def move_after_loading(path,device):
+                result=real_load(path,device)
+                loaded.append(Path(path))
+                point_to(other)
+                return result
+            with patch('predict.load_checkpoint',side_effect=move_after_loading):
+                predict.main(args)
+            self.assertEqual(resolve_checkpoint(root/'latest'),other)
+            self.assertEqual(loaded,[first])
+            recorded=json.loads((Path(args.output)/'generation_run.json').read_text())
+            self.assertEqual(recorded['identity']['model']['checkpoint_completion_sha256'],
+                             digest(first/'COMPLETE.json'))
+            self.assertEqual(recorded['metadata']['model']['revision'],'main')
 
 
 if __name__=='__main__':

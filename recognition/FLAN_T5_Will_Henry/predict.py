@@ -28,7 +28,10 @@ def generate(args, run):
     device = choose_device(args.device)
     output = Path(args.output)
     if args.checkpoint:
-        model, tokenizer, settings = load_checkpoint(args.checkpoint, device)
+        # Bind a mutable best/latest alias once. Loading and recorded identity
+        # must refer to this same immutable directory if the alias later moves.
+        checkpoint = resolve_checkpoint(args.checkpoint)
+        model, tokenizer, settings = load_checkpoint(checkpoint, device)
     else:
         tokenizer = AutoTokenizer.from_pretrained(args.model, revision=args.revision)
         model = RadiologySimplifier(args.model, args.revision, mode="frozen").to(device)
@@ -42,7 +45,6 @@ def generate(args, run):
         raise ValueError("Final-validation role requires all 10000 reports and no --limit")
     producer = environment(device)
     if args.checkpoint:
-        checkpoint = resolve_checkpoint(args.checkpoint)
         model_identity = {"checkpoint_completion_sha256": sha256(checkpoint / "COMPLETE.json")}
     else:
         local = Path(args.model)
