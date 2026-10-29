@@ -61,6 +61,22 @@ immutable model identities and the same settings for all models. Run the three
 jobs sequentially under the existing durable supervision pattern. Set output
 directories `runs/final/frozen`, `runs/final/full`, `runs/final/lora`.
 
+`supervise_prediction.py` accepts a reviewed JSON launch configuration with
+the training run, expected update count, final completion-audit receipt,
+working/output directories, explicit command and producer-file hashes. The
+receipt is created only after checking the completed training checkpoint and
+292,233 exposures; logged completion alone is insufficient. Supervision records
+child output, GPU samples, disk/progress flags and ten-minute health observations.
+It has no elapsed-time cutoff or automatic restart.
+
+The supervisor supplies one shared `--gpu-lock` path for every evaluation job.
+The actual prediction worker acquires this OS file lease before loading a model,
+so an observer crash cannot release it around live GPU work. A leftover lock file
+is harmless once its owning process exits; do not delete files to bypass a live
+lease. Observation-write failures are reported and retried, including terminal
+status publication. Resume only after the previous worker has exited, using the
+same command/output and `--resume`; preserve all successful batches.
+
 Generation now publishes checksum-protected batches. On failure, repeat the
 same command/output with `--resume`; completed batches are verified and skipped.
 Do not change the model, source file, producer code, decoder or batch during a

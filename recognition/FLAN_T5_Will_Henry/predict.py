@@ -15,12 +15,15 @@ from modules import MODEL, RadiologySimplifier, choose_device, load_checkpoint
 from runtime import environment, memory_stats, precision_context, reset_memory, set_seed, sha256, synchronise
 from checkpoint_storage import resolve_checkpoint
 from prediction_storage import PredictionRun
+from gpu_lease import gpu_lease
 from inference_identity import bind_source, verify_source, effective_runtime
 
 
 def main(args):
-    with PredictionRun(args.output, args.resume) as run:
-        return generate(args, run)
+    # The actual worker owns this lease, so an observer crash cannot release it.
+    with gpu_lease(args.gpu_lock):
+        with PredictionRun(args.output, args.resume) as run:
+            return generate(args, run)
 
 
 def generate(args, run):
@@ -74,7 +77,7 @@ def generate(args, run):
                 "effective_runtime": runtime,
                 "packages": producer["packages"],
                 "code_sha256": {name: sha256(code / name) for name in
-                                ("predict.py", "prediction_storage.py", "inference_identity.py", "modules.py", "dataset.py", "metrics.py", "runtime.py")}}
+                                ("predict.py", "prediction_storage.py", "inference_identity.py", "gpu_lease.py", "modules.py", "dataset.py", "metrics.py", "runtime.py")}}
     run.configure(identity, {"model": settings, "environment": producer,
                              "effective_runtime": runtime,
                              "parameters": model.parameter_counts()}, rows)
@@ -157,6 +160,7 @@ def parser():
     p.add_argument("--manifest", default="data/prepared/dev.jsonl")
     p.add_argument("--output", required=True)
     p.add_argument("--checkpoint")
+    p.add_argument("--gpu-lock", help="Optional shared local GPU lease; acquired before model loading")
     p.add_argument("--model", default=MODEL)
     p.add_argument("--revision", default="main")
     p.add_argument("--limit", type=int)

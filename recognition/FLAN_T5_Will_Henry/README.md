@@ -245,6 +245,11 @@ tokenizer/config files, or the resolved immutable Hub revision. LoRA's external
 base is bound separately from its adapter. Effective BF16/FP32, device
 capability and CPU/tokenizer thread settings must remain consistent so resumed
 resource measurements are not silently labelled with a different runtime.
+Long evaluation jobs can use `supervise_prediction.py` for process/GPU logs and
+ten-minute health observations after the completed-training audit. Its shared
+`--gpu-lock` is held by the prediction worker, preventing another supervised
+evaluation from entering while that worker survives an observer failure.
+Observation-write failures are reported and retried; outputs remain recoverable.
 Completed batches are checksummed and skipped; a failed unpublished
 batch may be repeated. Final `predictions.jsonl`, `metrics.json` and review
 candidates are produced only after the selected manifest completes. Official
@@ -262,7 +267,9 @@ CPU diagnostics and tests:
 
 Tests include padding-mask correctness, trainable adapter gradients, saved-model
 reload, checkpoint/RNG/cursor continuation, Windows status-sharing behavior and
-resumable inference with tiny offline models. Exact floating-point agreement
+resumable inference with tiny offline models. CPU process tests also cover
+observer termination with a live worker lease, real status-write failures and
+checksum-preserving generation recovery. Exact floating-point agreement
 across different GPUs or library versions is not promised. Data, weights and
 generated report exports remain in ignored local directories.
 
