@@ -19,7 +19,7 @@ Development monitoring, feasibility pilots and final evaluation are identified
 separately throughout this report. Empty final-result cells do not mean zero.
 
 The practical feasibility check-off has been reported complete by the author.
-The original written review is reproduced in its own section below.
+The one-page review presented on 29 October is reproduced below.
 
 ## How the model works
 
@@ -266,67 +266,75 @@ resumable inference with tiny offline models. Exact floating-point agreement
 across different GPUs or library versions is not promised. Data, weights and
 generated report exports remain in ignored local directories.
 
-## Original feasibility review
+## Feasibility review presented on 29 October 2026
 
-The following is the original review, retained as historical evidence. Its pilot
-counts and projections describe that stage; the measured progress and final
-results sections above supersede estimates when completed.
+The following reproduces the one-page review presented for the feasibility
+check on 29 October 2026. The author reported the check-off successful that
+morning. Its preliminary measurements and proposed next steps describe the
+state at presentation; subsequent training progress is reported above.
 
-**William Henry · COMP3710 · Project 2.6 · tutor consultation: 20 October 2026**
+**William Henry | COMP3710 Project 2.6 | Radiology report summarisation | 29 October 2026**
 
-**User and purpose.** Help a patient understand an existing radiology report.
-The prototype rewrites text for review; it does not interpret images or offer
-diagnoses. The engineering question is whether fine-tuning improves readability
-without dropping findings, reversing negation or overstating uncertainty.
+### User Need, Scope & Acceptance Criteria
 
-**Acceptance criteria.**
-1. Frozen, full and LoRA models run on the same held-out examples. Report
-   ROUGE-1, ROUGE-2, ROUGE-L and ROUGE-Lsum, including sample counts and settings.
-2. No exact normalised input report or image path overlaps training, development
-   and final evaluation. Audit missing pairs, duplicates and conflicting targets;
-   disclose that patient independence cannot be verified without patient IDs.
-3. Fine-tuning gives a measurable development improvement over the frozen
-   baseline. Reserve final evaluation for the selected settings. If improvement
-   is absent, report it and investigate rather than claim success.
-4. Audit 3–5 actual failures for hallucination, omitted findings, changed negation,
-   uncertainty and readability. Give a concrete recommendation on human review.
-5. Run a local smoke test within 4 GiB VRAM; measure peak allocated/reserved memory,
-   parameter counts and generated tokens/s. If turnaround is impractical, assess
-   Colab before spending; no paid compute has yet been authorised.
+Patients need readable explanations of radiology reports without invented
+findings, missing acute findings or altered diagnostic certainty. This project
+studies text-only simplification, aiming for plain, approximately sixth-grade
+language; it does not interpret images or provide clinical advice. The central
+question is whether task adaptation improves the usefulness of FLAN-T5 summaries
+without sacrificing factual fidelity. Acceptance requires:
 
-**Model, data and course concepts.** FLAN-T5-small (about 77M parameters), listed
-T5/FLAN-T5 Hard difficulty. BioLaySumm2025-LaymanRRG open-source track: 150,454
-training and 10,000 validation rows. Compare the frozen pretrained baseline with
-full fine-tuning and rank-8 LoRA attention adapters. The method uses conditional
-sequence modelling, teacher-forced cross-entropy, padding masks, regularisation
-and held-out evaluation. Remove 42,249 validation-connected training rows, then
-derive 97,411 training and 10,794 development examples from the remaining training
-components. Reserve all 10,000 official validation rows for locked final evaluation,
-retaining the original row weighting and reference rewrites.
+1. Frozen, full-tuned and LoRA outputs on the same held-out rows, with zero
+   audited report/image-identity overlap across splits.
+2. ROUGE-1/2/L/Lsum and total/trainable parameters, peak VRAM, runtime and
+   inference tokens/s for all applicable runs.
+3. A documented audit of 3–5 representative cases, with no invented pathology,
+   negation reversal or critical omission as the target, and every failure reported.
+4. The same cases scored for jargon, sentence clarity and preserved uncertainty,
+   with every unclear output reported.
+5. Operation within the local 4 GiB GPU limit without out-of-memory failure.
 
-**Initial evidence.** Pinned data/model assets are downloaded and hash-verified.
-All 51 tests pass, including CPU model and resume tests. The raw data has no
-missing report/target pairs. All 26 independent split checks pass, with no
-cross-split ID, canonical report or available image overlap; patient independence
-remains unverified. On the RTX 3050 Ti Laptop (4 GiB, working CUDA/BF16), full and
-LoRA completed two optimiser steps each at batch 1, accumulation 2 and 384/256
-source/target caps without OOM. Sampled whole-device peaks were 1,845/975 MiB;
-all three modes generated on the same eight development IDs. These are bounded
-feasibility checks, not final-quality results. Evidence: tested commit `28869a0`,
-`runs/empirical-20261019/empirical-summary.json` and `data/prepared/` audits.
+A small successful case audit would not establish clinical safety.
 
-**Risks, budget and next step.** Main risks are repeated/overlapping reports,
-limited metadata, truncating important findings, and fluent but incorrect outputs.
-The token audit found 0.80% of training inputs and 1.83% of targets exceed the
-provisional caps. Choose lengths and training scope using development data;
-ROUGE scoring retains complete reference text. The 64-example timing pilots
-naively scale to about 14 training-loop hours per model for three full-data epochs,
-excluding validation, checkpointing, loading and sustained thermal effects.
-Next: obtain tutor checkoff, agree settings and assess the training budget.
-Fallback: retain the small checkpoint, reduce microbatch size and use gradient
-accumulation/checkpointing; if its output remains inadequate, reassess model size
-before further tuning. A negative result remains reportable but is not a promise
-of full marks. Complete the required modular code, README, PR and review response.
+### Model Choice & Course Concepts
+
+The HARD T5/FLAN-T5 option uses BioLaySumm2025-LaymanRRG-opensource-track
+technical-report/lay-rewrite pairs. The audited split contains 97,411 training
+and 10,794 development rows; all 10,000 official validation rows are reserved
+for final comparison. FLAN-T5-small has 76,961,152 base parameters and an
+encoder–decoder Transformer architecture. Full fine-tuning and rank-8 LoRA
+start independently from the same pretrained checkpoint. The comparison
+applies transfer learning, attention, supervised sequence prediction, masked
+cross-entropy, gradient optimisation and low-rank adaptation. Source/target
+limits are 384/256 tokens. Transformers/PEFT dependency approval must be
+confirmed against the course rules.
+
+### Preliminary Feasibility Evidence
+
+The data audit removed 42,249 validation-connected training rows before
+splitting, with no remaining cross-split overlap on the audited identities;
+patient independence is unverified. Historical preparation checks recorded
+51 passing tests and frozen/full/LoRA inference on eight development examples.
+A representative RTX 3050 Ti 4 GB optimiser-step pilot peaked at 1,845 MiB for
+full tuning and 975 MiB for LoRA, without an out-of-memory error. These
+measurements establish capacity, not final throughput. In logs verified on
+20 October, LoRA had completed three epochs; fixed development-subset loss
+fell from 2.662897 to 1.221684. Full tuning was paused on 20 October at step
+40,779 before its first epoch finished. No final three-way held-out quality
+result is available.
+
+### Risks, Budget & Fallback
+
+The main risks are clinically misleading rewrites, truncation,
+duplicate/uneven references, overfitting and a batch-size confound: LoRA changed
+effective batch 2 to 4, while full tuning stayed at 2. The budget is one local
+GPU, no paid compute, and up to three epochs for each adapted model, with
+checkpoints and bounded retention. Once continuation is authorised, the next
+experiment is to complete full tuning, select checkpoints using development
+data, then run the locked three-way evaluation and case audit. If time is
+insufficient, a clearly labelled shorter full-tuning run preserves the required
+comparison; LoRA-only results do not satisfy it. Unsafe outputs remain research
+examples, with source review and clinical sign-off required before any patient use.
 
 ## Artificial Intelligence Usage Disclosure
 
