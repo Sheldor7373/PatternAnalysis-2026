@@ -13,16 +13,20 @@ from dataset import PROMPT, read_jsonl, select_rows, write_json, write_jsonl
 from metrics import safety_flags, score_predictions
 from modules import MODEL, RadiologySimplifier, choose_device, load_checkpoint
 from runtime import environment, memory_stats, precision_context, reset_memory, set_seed, sha256, synchronise
+from checkpoint_storage import resolve_checkpoint
+from prediction_storage import PredictionRun
 
 
 def main(args):
+    with PredictionRun(args.output, args.resume) as run:
+        return generate(args, run)
+
+
+def generate(args, run):
     set_seed(args.seed)
     torch.set_num_threads(args.cpu_threads)
     device = choose_device(args.device)
     output = Path(args.output)
-    if output.exists() and any(output.iterdir()):
-        raise ValueError("Output directory is not empty; choose a fresh path")
-    output.mkdir(parents=True, exist_ok=True)
     if args.checkpoint:
         model, tokenizer, settings = load_checkpoint(args.checkpoint, device)
     else:
@@ -34,15 +38,38 @@ def main(args):
     rows = select_rows(read_jsonl(args.manifest), args.limit, args.seed)
     if not rows:
         raise ValueError("Empty input manifest")
-    predictions, latencies = [], []
-    generated_tokens, truncated_inputs, capped_outputs = 0, 0, 0
+    producer = environment(device)
+    if args.checkpoint:
+        checkpoint = resolve_checkpoint(args.checkpoint)
+        model_identity = {"checkpoint_completion_sha256": sha256(checkpoint / "COMPLETE.json")}
+    else:
+        local = Path(args.model)
+        model_identity = {"model": settings["model"], "revision": settings["revision"]}
+        if local.is_dir():
+            model_identity["local_files_sha256"] = {path.name: sha256(path) for path in sorted(local.iterdir())
+                                                    if path.is_file() and path.suffix in {".json", ".safetensors", ".model"}}
+        elif settings["revision"] == "main":
+            raise ValueError("Remote baseline must resolve to an immutable model revision")
+    selected_ids_sha256 = hashlib.sha256("\n".join(row["id"] for row in rows).encode()).hexdigest()
+    generation = {"prompt": PROMPT, "source_length": args.source_length,
+                  "max_new_tokens": args.target_length, "beams": args.beams,
+                  "sampling": False, "seed": args.seed, "visible_input_includes_prompt": True}
+    code = Path(__file__).parent
+    identity = {"model": model_identity, "manifest_sha256": sha256(args.manifest),
+                "selected_ids_sha256": selected_ids_sha256, "generation": generation,
+                "batch_size": args.batch_size, "precision": args.precision, "device": str(device),
+                "packages": producer["packages"],
+                "code_sha256": {name: sha256(code / name) for name in
+                                ("predict.py", "prediction_storage.py", "modules.py", "dataset.py", "metrics.py", "runtime.py")}}
+    run.configure(identity, {"model": settings, "environment": producer,
+                             "parameters": model.parameter_counts()}, rows)
     reset_memory(device)
     start = time.perf_counter()
-    for offset in range(0, len(rows), args.batch_size):
+    for offset in range(len(run.predictions), len(rows), args.batch_size):
+        batch_started = time.perf_counter()
         batch = rows[offset:offset + args.batch_size]
         texts = [PROMPT + row["input"] for row in batch]
         lengths = [len(ids) for ids in tokenizer(texts, truncation=False)["input_ids"]]
-        truncated_inputs += sum(n > args.source_length for n in lengths)
         tokens = tokenizer(texts, truncation=True, max_length=args.source_length, padding=True,
                            return_tensors="pt").to(device)
         synchronise(device)
@@ -51,30 +78,49 @@ def main(args):
             generated = model.model.generate(**tokens, max_new_tokens=args.target_length,
                                              num_beams=args.beams, do_sample=False)
         synchronise(device)
-        latencies.append(time.perf_counter() - tick)
+        latency = time.perf_counter() - tick
         # Count nonpadding tokens after the decoder start, including EOS.
-        generated_tokens += int(generated[:, 1:].ne(tokenizer.pad_token_id).sum())
-        capped_outputs += sum(tokenizer.eos_token_id not in seq[1:] for seq in generated.tolist())
+        token_counts = generated[:, 1:].ne(tokenizer.pad_token_id).sum(dim=1).tolist()
+        ended = [tokenizer.eos_token_id in seq[1:] for seq in generated.tolist()]
         decoded = tokenizer.batch_decode(generated, skip_special_tokens=True)
-        predictions.extend({**row, "prediction": text} for row, text in zip(batch, decoded))
-        print(f"{len(predictions)}/{len(rows)} reports", flush=True)
-    elapsed = time.perf_counter() - start
-    write_jsonl(output / "predictions.jsonl", predictions)
+        visible = tokenizer.batch_decode(tokens["input_ids"], skip_special_tokens=True)
+        visible_counts = tokens["attention_mask"].sum(dim=1).tolist()
+        produced = [{**row, "prediction": decoded[i], "visible_input": visible[i],
+                     "source_tokens_before_truncation": lengths[i], "visible_source_tokens": visible_counts[i],
+                     "input_truncated": lengths[i] > args.source_length,
+                     "generated_tokens": token_counts[i], "output_has_eos": ended[i]}
+                    for i, row in enumerate(batch)]
+        run.commit({"start": offset, "rows": produced, "generation_seconds": latency,
+                    "wall_seconds": time.perf_counter() - batch_started,
+                    "generated_tokens": sum(token_counts),
+                    "truncated_inputs": sum(n > args.source_length for n in lengths),
+                    "outputs_without_eos": sum(not value for value in ended), **memory_stats(device)})
+        print(f"{len(run.predictions)}/{len(rows)} reports (durably saved)", flush=True)
+        if args.max_minutes is not None and time.perf_counter() - start >= args.max_minutes * 60 and len(run.predictions) < len(rows):
+            run.progress("paused_time_budget")
+            return {"state": "paused_time_budget", "committed_examples": len(run.predictions), "total_examples": len(rows)}
+    predictions = run.predictions
+    run.export_predictions()
+    latencies = [batch["generation_seconds"] for batch in run.batches]
+    elapsed = sum(batch["wall_seconds"] for batch in run.batches)
+    generated_tokens = sum(batch["generated_tokens"] for batch in run.batches)
+    truncated_inputs = sum(batch["truncated_inputs"] for batch in run.batches)
+    capped_outputs = sum(batch["outputs_without_eos"] for batch in run.batches)
+    peaks = {key: max((batch[key] for batch in run.batches if batch.get(key) is not None), default=None)
+             for key in ("peak_allocated_mib", "peak_reserved_mib")}
     metrics = {"rouge": score_predictions(predictions), "examples": len(rows), "manifest": str(args.manifest),
                "manifest_sha256": sha256(args.manifest),
-               "selected_ids_sha256": hashlib.sha256("\n".join(r["id"] for r in rows).encode()).hexdigest(),
+               "selected_ids_sha256": selected_ids_sha256,
                "evaluation_scope": "complete manifest" if args.limit is None else "sampled pilot; not final evaluation",
-               "model": settings, "generation": {"prompt": PROMPT, "source_length": args.source_length,
-                                                  "max_new_tokens": args.target_length, "beams": args.beams,
-                                                  "sampling": False, "seed": args.seed},
+               "model": run.metadata["model"], "generation": generation,
                "truncated_inputs": truncated_inputs, "outputs_without_eos": capped_outputs,
                "wall_seconds": elapsed, "generation_seconds": sum(latencies),
                "generated_tokens": generated_tokens, "tokens_per_second": generated_tokens / sum(latencies),
                "reports_per_second": len(rows) / elapsed, "batch_size": args.batch_size,
                "median_batch_latency_seconds": statistics.median(latencies),
-               "latency_note": "Model generation only, includes first batch; wall time includes tokenisation, excludes loading/scoring.",
-               "precision": args.precision, **model.parameter_counts(), **memory_stats(device),
-               "environment": environment(device)}
+               "latency_note": "Generation time includes each session's first batch. Wall time sums batch tokenisation/generation/decoding; excludes loading, persistence, scoring and gaps between sessions.",
+               "precision": args.precision, **run.metadata["parameters"], **peaks,
+               "environment": run.metadata["environment"], "resumable_batch_count": len(run.batches)}
     write_json(output / "metrics.json", metrics)
     flagged = []
     for row in predictions:
@@ -82,10 +128,12 @@ def main(args):
         if any(flags.values()):
             flagged.append({**row, "review_flags": flags})
     write_jsonl(output / "review_candidates.jsonl", flagged)
+    run.progress("completed")
     print(json.dumps(metrics, indent=2))
+    return metrics
 
 
-if __name__ == "__main__":
+def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--manifest", default="data/prepared/dev.jsonl")
     p.add_argument("--output", required=True)
@@ -101,7 +149,16 @@ if __name__ == "__main__":
     p.add_argument("--cpu-threads", type=int, default=4)
     p.add_argument("--precision", choices=["auto", "bf16", "fp32"], default="auto")
     p.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
+    p.add_argument("--resume", action="store_true", help="Verify and continue completed batches in this output directory")
+    p.add_argument("--max-minutes", type=float, help="Pause after a committed batch; loading/scoring excluded; may be changed on resume")
+    return p
+
+
+if __name__ == "__main__":
+    p = parser()
     args = p.parse_args()
     if args.batch_size < 1 or args.beams < 1:
         p.error("batch-size and beams must be positive")
+    if args.max_minutes is not None and args.max_minutes < 0:
+        p.error("max-minutes must be nonnegative")
     main(args)
