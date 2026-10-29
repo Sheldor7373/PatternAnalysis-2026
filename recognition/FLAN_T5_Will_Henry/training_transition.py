@@ -63,14 +63,25 @@ def transition_policy(state, original, new, size):
     """Preserve the next LR, actual Adam step and original example milestones."""
     if original.get("max_steps") is not None or new.get("max_steps") is not None:
         raise ValueError("Batch transitions require an epoch-defined example budget, without max_steps")
-    if state.get("scheduler_policy"):
-        raise ValueError("A second batch transition requires a separately reviewed policy")
+    previous_policy = state.get("scheduler_policy")
+    # A same-effective-batch recovery retains the original update schedule.
+    # It is safe to re-anchor from it after validating that schedule below.
+    # A prior example-anchored batch change still needs a separate policy.
+    if previous_policy and previous_policy.get("kind") != "original_updates":
+        raise ValueError("A second effective-batch transition requires a separately reviewed policy")
     epoch, offset = checkpoint_cursor(state, original, size)
     if epoch >= new["epochs"]:
         raise ValueError("No training examples remain for a transition")
     old_total = remaining_updates(size, original["epochs"], 0, 0,
                                   original["batch_size"], original["accumulate"])
     warmup_steps = int(old_total * 0.05)
+    if previous_policy:
+        expected = {"size": size, "epochs": original["epochs"],
+                    "batch_size": original["batch_size"], "accumulate": original["accumulate"],
+                    "original_total_steps": old_total, "original_warmup_steps": warmup_steps,
+                    "final_examples": size * original["epochs"], "planned_steps": old_total}
+        if any(previous_policy.get(key) != value for key, value in expected.items()):
+            raise ValueError("Previous original-update policy does not match the checkpoint configuration")
     anchor_lrs = [group["lr"] for group in state["optimizer"]["param_groups"]]
     if state["scheduler"]["last_epoch"] != state["step"]:
         raise ValueError("Scheduler and actual optimizer step disagree")
