@@ -204,7 +204,141 @@ paths. Resume only with identical identity settings. The extension producer corr
 artifacts are preserved and correspond to their original producer commit, not
 this newer code. The original README/PDF are not rewritten by this extension.
 
-## Option 1 cutoff investigation
+## Option 1: input/output cutoff investigation
 
-Prepared separately; not yet complete. Its four settings and reserved samples
-are fixed above. Findings will be added after generation and source review.
+After the option 3 readout, the same selected full model completed the fixed
+2-by-2 cap comparison on separate 128 representative and 32 challenge groups:
+640 additional outputs, greedy decoding, batch 16 and BF16. The source cap
+includes the instruction. These remain development investigations, not a fresh
+confirmation on the already-inspected official validation set. No further GPU
+work or training followed this study; the 128-row confirmation reserve remains
+unused. Raw outputs and diagnostic packets remain local.
+
+### Representative cap comparison
+
+| Source/output cap | ROUGE-1 | ROUGE-2 | ROUGE-L | ROUGE-Lsum | Truncated inputs | No EOS | Repetition candidates |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 384/256 | 0.72059 | 0.53151 | 0.66608 | 0.69404 | 1 | 3 | 0 |
+| 768/256 | 0.72099 | 0.53139 | 0.66591 | 0.69429 | 0 | 3 | 0 |
+| 384/512 | 0.72083 | 0.53182 | 0.66628 | 0.69424 | 1 | 0 | 0 |
+| 768/512 | 0.72121 | 0.53176 | 0.66629 | 0.69455 | 0 | 0 | 0 |
+
+| Difference from 384/256 | ROUGE-L difference | 95% paired interval | Generation seconds | Returned tokens/s | Allocated / sampled-device MiB |
+|---|---:|---|---:|---:|---:|
+| 384/256 | Baseline | - | 26.56 | 314.10 | 572.97 / 1019 |
+| 768/256 | -0.00018 | [-0.00120, +0.00068] | 34.70 | 240.31 | 575.21 / 1025 |
+| 384/512 | +0.00019 | [+0.00000, +0.00050] | 30.97 | 269.83 | 572.97 / 1019 |
+| 768/512 | +0.00020 | [-0.00020, +0.00079] | 31.19 | 268.43 | 575.21 / 1025 |
+
+### Challenge cap comparison
+
+| Source/output cap | ROUGE-1 | ROUGE-2 | ROUGE-L | ROUGE-Lsum | Truncated inputs | No EOS | Repetition candidates |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 384/256 | 0.50269 | 0.29168 | 0.36398 | 0.48984 | 32 | 29 | 1 |
+| 768/256 | 0.48597 | 0.27536 | 0.34574 | 0.47262 | 4 | 29 | 4 |
+| 384/512 | 0.51525 | 0.29870 | 0.37506 | 0.50215 | 32 | 0 | 2 |
+| 768/512 | 0.49501 | 0.28050 | 0.35416 | 0.48172 | 4 | 1 | 6 |
+
+| Difference from 384/256 | ROUGE-L difference | 95% paired interval | Generation seconds | Returned tokens/s | Allocated / sampled-device MiB |
+|---|---:|---|---:|---:|---:|
+| 384/256 | Baseline | - | 9.56 | 852.39 | 573.99 / 783 |
+| 768/256 | -0.01824 | [-0.03573, -0.00373] | 12.52 | 653.27 | 1189.58 / 1627 |
+| 384/512 | +0.01108 | [+0.00563, +0.01674] | 14.20 | 612.14 | 573.99 / 783 |
+| 768/512 | -0.00981 | [-0.02860, +0.00598] | 15.11 | 595.81 | 1189.58 / 1627 |
+
+Intervals use 1,000 shared paired draws over sampled groups, seed 3732. They
+are exploratory evaluation-sample uncertainty, not factuality confidence. The
+challenge comprises the 32 longest remaining reserved groups, all BIMCV-COVID19;
+length and domain are confounded. Its sources reach 1,111 tokens: four still
+exceed 768. Full reference lengths are not minimum required output lengths, but
+nine challenge references exceed 512 tokens. References remain complete for ROUGE.
+
+All 640 outputs were retained; none was empty. Repetition candidates use the same
+limited four-gram heuristic as the original report and are not verified clinical
+error rates. A missing terminal full stop is also only a textual review flag.
+In the challenge, output-only expansion changes no-EOS from 29 to zero while
+outputs lacking terminal punctuation change from 29 to 31: a termination flag
+improves without proving sentence/content completion. The selected cases below
+check the actual text rather than inferring failure from punctuation alone.
+
+![Cap comparison and termination flags](figures/cutoff-dev-comparison.png)
+
+Timing includes the first generation batch and excludes loading/persistence/
+scoring. These short sequential jobs have noisy timing and different output
+lengths; do not infer a controlled causal speedup from nonmonotonic times.
+Peak allocated memory reached 1,189.58 MiB and sampled device use 1,627 MiB,
+leaving at least 2,469 MiB sampled headroom. Thermal safeguards stayed enabled.
+The complete eight-job workflow lasted about 5.2 minutes including overhead;
+per-setting generation costs are reported above. No OOM or process error occurred.
+
+### Four diagnostic case comparisons
+
+These cases were selected using long inputs, gain/repetition patterns and paired
+contrasts. They are AI-assisted source-grounded text reviews, not a random
+clinical-error estimate or radiologist adjudication. Original source, full
+reference, visible inputs and all four outputs were checked. Only minimal
+paraphrases are published.
+
+- `train:145240`: holding the source at 384 and extending output to 512 preserves
+  the original prefix, then adds the already-visible residual-fluid and newly
+  appeared left-lung findings. This is a local completeness recovery. Earlier
+  fistula/vein wording errors remain. With input 768, the model instead repeats
+  procedural statements; extra output extends that repetition.
+- `train:150111`: even 768 still truncates this long source. Some additional
+  clinical content becomes visible, yet the generator loops on placeholder
+  metadata. At 384/512 it emits EOS after contradictory statements and an
+  unfinished clause. Enlarging budgets is neither input-completeness proof nor
+  a remedy for a repetition loop.
+- `train:148510`: source 768 exposes the late remission interpretation and
+  fracture findings, but outputs omit them and repeat organ descriptions. The
+  combined-cap ROUGE-L increases from about 0.196 to 0.282 despite that failure.
+  EOS appears at token 251 with an unfinished phrase; a 512 cap gives exactly
+  the same output. This is early termination/content selection, not a binding
+  maximum-output limit.
+- `train:132241`: a new splenic finding is outside the 384 input but inside
+  768. Neither wider-input output mentions it; both repeat chest findings.
+  More input repairs a temporal measurement association locally while other
+  anatomical errors persist. At source 384, both output caps yield the same
+  214-token EOS output: raising a limit cannot force useful continuation after
+  the model already chose EOS.
+
+### What the controlled comparisons imply
+
+For fixed source/batch/greedy settings, every baseline no-EOS output in both
+samples is an exact decoded-text prefix of its 512-token-cap counterpart:
+3/3 representative and 29/29 challenge rows at each source cap. This is text
+prefix agreement, not independently reconstructed raw-token equivalence. Extra
+budget appends content and cannot retroactively repair an erroneous prefix.
+Changing the source cap instead changes the encoder representation and therefore
+can change the entire generated sequence, including early claims.
+
+A tokenizer-only probe of the existing `ReportDataset` rule on four selected long
+references produced 256 labels ending in EOS. Training used capped targets,
+whereas scoring uses full references. A learned termination/content-selection
+bias is consistent with premature EOS and short coverage on long inputs; no
+training ablation established that it caused these particular failures. Raising
+an inference maximum does not retrain that behaviour. Likewise, longer encoder
+input alone supplies no explicit coverage or factual-consistency objective.
+
+Output-only expansion is a candidate for a **reviewed continuation experiment**:
+it recovered a visible finding and raised challenge ROUGE-L by 0.01108
+[0.00563, 0.01674] at 1.49 times observed generation cost. It is not an automatic
+safety fix. Wider input removed 28 of 32 input-truncation flags but worsened
+mean overlap and raised repetition candidates; expanding both did not establish
+an aggregate improvement. Keep the completed baseline defaults/results intact.
+Route long, repetitive, unfinished or source-inconsistent reports for source
+review; section-aware handling and training with suitable full/section targets
+are future work, not implemented or clinically validated controls here.
+
+### Verification and retained evidence
+
+The implementation passed 151 CPU regressions and independent code review.
+Independent results audits reproduced option 3's 40 ROUGE means/32 intervals and
+option 1's 32 means/24 intervals, checked group separation, all 1,840 comparison
+outputs, producer/checkpoint identities, checksummed journals, resources and
+reported case claims. The original baseline README/PDF, weights and 30,000
+predictions were preserved. Superseded accounting pilots remain separate.
+No raw token IDs were saved: first-EOS logic was tested and exported totals
+reconciled, but exact EOS positions cannot be reconstructed from decoded text.
+No additional teacher model, clinical judge, retraining, upstream PR or Turnitin
+submission was performed as part of these extensions.
