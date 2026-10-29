@@ -16,6 +16,7 @@ from runtime import environment, memory_stats, precision_context, reset_memory, 
 from checkpoint_storage import resolve_checkpoint
 from prediction_storage import PredictionRun
 from gpu_lease import gpu_lease
+from decode_strategies import generate_tokens, decoding_settings
 from inference_identity import bind_source, verify_source, effective_runtime
 
 
@@ -27,6 +28,7 @@ def main(args):
 
 
 def generate(args, run):
+    strategy = decoding_settings(args.decoder, args.beams, args.cad_alpha, args.cad_prior_prompt)
     set_seed(args.seed)
     torch.set_num_threads(args.cpu_threads)
     device = choose_device(args.device)
@@ -68,7 +70,7 @@ def generate(args, run):
     selected_ids_sha256 = hashlib.sha256("\n".join(row["id"] for row in rows).encode()).hexdigest()
     generation = {"prompt": PROMPT, "source_length": args.source_length,
                   "max_new_tokens": args.target_length, "beams": args.beams,
-                  "sampling": False, "seed": args.seed, "visible_input_includes_prompt": True}
+                  "sampling": False, "seed": args.seed, "visible_input_includes_prompt": True, **strategy}
     code = Path(__file__).parent
     identity = {"model": model_identity, "manifest_sha256": sha256(args.manifest),
                 "evaluation_role": args.evaluation_role,
@@ -77,7 +79,7 @@ def generate(args, run):
                 "effective_runtime": runtime,
                 "packages": producer["packages"],
                 "code_sha256": {name: sha256(code / name) for name in
-                                ("predict.py", "prediction_storage.py", "inference_identity.py", "gpu_lease.py", "modules.py", "dataset.py", "metrics.py", "runtime.py")}}
+                                ("predict.py", "decode_strategies.py", "prediction_storage.py", "inference_identity.py", "gpu_lease.py", "modules.py", "dataset.py", "metrics.py", "runtime.py")}}
     run.configure(identity, {"model": settings, "environment": producer,
                              "effective_runtime": runtime,
                              "parameters": model.parameter_counts()}, rows)
@@ -93,8 +95,9 @@ def generate(args, run):
         synchronise(device)
         tick = time.perf_counter()
         with torch.inference_mode(), precision_context(device, runtime["effective_precision"]):
-            generated = model.model.generate(**tokens, max_new_tokens=args.target_length,
-                                             num_beams=args.beams, do_sample=False)
+            generated = generate_tokens(model.model, tokens, tokenizer, args.target_length,
+                                        decoder=args.decoder, beams=args.beams, alpha=args.cad_alpha,
+                                        prior_prompt=args.cad_prior_prompt)
         synchronise(device)
         latency = time.perf_counter() - tick
         # Count nonpadding tokens after the decoder start, including EOS.
@@ -168,6 +171,9 @@ def parser():
     p.add_argument("--source-length", type=int, default=384)
     p.add_argument("--target-length", type=int, default=256)
     p.add_argument("--beams", type=int, default=1)
+    p.add_argument("--decoder", choices=["standard", "cad"], default="standard")
+    p.add_argument("--cad-alpha", type=float, default=0.0)
+    p.add_argument("--cad-prior-prompt", default=PROMPT, help="CAD query without the report; recorded in resume identity")
     p.add_argument("--seed", type=int, default=3710)
     p.add_argument("--cpu-threads", type=int, default=4)
     p.add_argument("--precision", choices=["auto", "bf16", "fp32"], default="auto")
