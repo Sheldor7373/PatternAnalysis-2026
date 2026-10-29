@@ -21,6 +21,20 @@ def contrast_logits(conditional, prior, alpha):
     return (1 + alpha) * conditional.float() - alpha * prior.float()
 
 
+def token_statistics(generated, pad_token_id, eos_token_id):
+    """Nonpad decoder tokens through FIRST EOS, excluding decoder start.
+
+    Transformers4.57 beam search may fill finished tails with EOS when pad_id=0
+    (`pad_token_id or eos_token_id[0]`). Tail fill is not generated content.
+    This also handles ordinary zero-pad tails without changing decoded text.
+    """
+    tokens=generated[:,1:]
+    eos=tokens.eq(eos_token_id)
+    before_first=(eos.long().cumsum(dim=1)-eos.long()).eq(0)
+    counts=(before_first & tokens.ne(pad_token_id)).sum(dim=1).tolist()
+    return counts,eos.any(dim=1).tolist()
+
+
 class ContextAwareProcessor(LogitsProcessor):
     """Independent encoder and KV cache for p(token | instruction, same prefix).
 

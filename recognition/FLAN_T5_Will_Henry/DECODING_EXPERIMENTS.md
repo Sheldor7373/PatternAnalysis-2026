@@ -70,4 +70,17 @@ An independent read-only implementation review found no blocking issue. New
 strategy memory pilots must pass before the bounded development runs. Ten-minute
 process/GPU health observations and checksum-published batches remain enabled.
 
+A memory pilot exposed a Transformers4.57 beam-tail accounting issue: zero-pad
+finished outputs can be filled with repeated EOS. The extended counter stops at
+the first EOS (inclusive), rather than counting filled tails. Original pilot
+artifacts are retained as superseded; corrected experiments use fresh output
+folders and identities. Their decoded content was unaffected. Reported tokens/s
+counts the returned sequence's content/EOS, not every explored beam candidate.
+
+AI assistance: ChatGPT/Codex helped read the paper, implement the extension,
+prepare group reservations, write tests and inspect saved outputs. Independent
+AI-assisted read-only review checked the formula, caches, EOS, identities and
+sampling design. The author remains responsible for verifying and defending
+these choices. No clinical reviewer or patient-comprehension study is claimed.
+
 Results are pending; no improvement is claimed here.

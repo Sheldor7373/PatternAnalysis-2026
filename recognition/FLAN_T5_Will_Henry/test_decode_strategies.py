@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 import torch
 from transformers import LogitsProcessor
-from decode_strategies import ContextAwareProcessor, contrast_logits, decoding_settings, generate_tokens
+from decode_strategies import ContextAwareProcessor, contrast_logits, decoding_settings, generate_tokens, token_statistics
 from test_model import ModelTests
 from test_predict_resume import PredictionResumeTests
 import predict
@@ -33,6 +33,12 @@ class DecodingTests(unittest.TestCase):
         for bad in (-1,float('inf'),float('nan')):
             with self.assertRaises(ValueError):decoding_settings('cad',1,bad,'instruction')
         with self.assertRaises(ValueError):decoding_settings('cad',2,.5,'instruction')
+
+    def test_first_eos_stops_content_count_for_beam_filled_tails(self):
+        ids=torch.tensor([[0,3,1,1,1],[0,3,4,1,0],[0,3,4,5,6]])
+        counts,ended=token_statistics(ids,0,1)
+        self.assertEqual(counts,[2,3,4])
+        self.assertEqual(ended,[True,True,False])
 
     def test_alpha_zero_and_standard_beams_equal_native_generate(self):
         tokenizer=ModelTests.tokenizer

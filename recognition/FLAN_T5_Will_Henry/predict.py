@@ -16,7 +16,7 @@ from runtime import environment, memory_stats, precision_context, reset_memory, 
 from checkpoint_storage import resolve_checkpoint
 from prediction_storage import PredictionRun
 from gpu_lease import gpu_lease
-from decode_strategies import generate_tokens, decoding_settings
+from decode_strategies import generate_tokens, decoding_settings, token_statistics
 from inference_identity import bind_source, verify_source, effective_runtime
 
 
@@ -101,8 +101,7 @@ def generate(args, run):
         synchronise(device)
         latency = time.perf_counter() - tick
         # Count nonpadding tokens after the decoder start, including EOS.
-        token_counts = generated[:, 1:].ne(tokenizer.pad_token_id).sum(dim=1).tolist()
-        ended = [tokenizer.eos_token_id in seq[1:] for seq in generated.tolist()]
+        token_counts, ended = token_statistics(generated, tokenizer.pad_token_id, tokenizer.eos_token_id)
         decoded = tokenizer.batch_decode(generated, skip_special_tokens=True)
         visible = tokenizer.batch_decode(tokens["input_ids"], skip_special_tokens=True)
         visible_counts = tokens["attention_mask"].sum(dim=1).tolist()
