@@ -46,8 +46,10 @@ def main(args):
                                   {'params':critic.head.parameters(),'lr':args.head_lr}],weight_decay=.01)
     encoded={p:[encode_pair(tokenizer,r['source'],r['candidate'],recipe['source_cap'],recipe['candidate_cap']) for r in group] for p,group in rows.items()}
     generator=torch.Generator().manual_seed(args.seed);start_epoch=0;cursor=0;order=None;best=float('inf');stale=0;step=0;history=[]
+    continuation=getattr(args,'continue_from',None)
     identity={'assembly':assembly,'stage_a_head_sha256':sha(stage/'mlp.pt'),'encoder_recipe_sha256':stage_run['cache']['recipe_sha256'],
-              'config':{k:v for k,v in vars(args).items() if k not in {'data','stage_a','encoder','output','gpu_lease','resume'}}}
+              'config':{k:v for k,v in vars(args).items() if k not in {'data','stage_a','encoder','output','gpu_lease','resume','continue_from'}}}
+    if continuation:identity['continuation_source_sha256']=sha(continuation)
     if (out/'run.json').exists():
         if json.loads((out/'run.json').read_text())!=identity:raise ValueError('Changed adaptation identity')
         if not args.resume:raise ValueError('Existing run requires --resume')
@@ -56,14 +58,36 @@ def main(args):
         start_epoch=state['epoch'];cursor=state['cursor'];order=state['order'];best=state['best'];stale=state['stale'];step=state['step'];history=state['history']
         torch.set_rng_state(state['torch_rng'].cpu());generator.set_state(state['order_rng'].cpu());random.setstate(state['python_rng'])
         if device.type=='cuda':torch.cuda.set_rng_state_all([r.cpu() for r in state['cuda_rng']])
-    else:atomic_json(out/'run.json',identity)
+    else:
+        if continuation:
+            parent_identity=json.loads(Path(continuation).with_name('run.json').read_text())
+            if any(parent_identity[k]!=identity[k] for k in ('assembly','stage_a_head_sha256','encoder_recipe_sha256')):
+                raise ValueError('Continuation comes from a different assembly, frozen head or encoder')
+            state=torch.load(continuation,map_location=device,weights_only=False)
+            if sha(continuation)!=identity['continuation_source_sha256']:raise ValueError('Continuation source changed while loading')
+            if state['cursor']!=0 or state['order'] is not None:raise ValueError('Late-rate continuation requires a completed epoch boundary')
+            if not 0<state['epoch']<args.epochs:raise ValueError('Continuation must increase the finite total epoch target')
+            if abs(state['history'][-1]['validation']['log_loss']-state['best'])>1e-12:
+                raise ValueError('Do not extend a worse terminal model; assess the validation curve first')
+            critic.load_state_dict(state['critic']);optimizer.load_state_dict(state['optimizer'])
+            old_rates=[g['lr'] for g in optimizer.param_groups]
+            if not (args.encoder_lr<old_rates[0] and args.head_lr<old_rates[1]):raise ValueError('Late-stage learning rates must decrease')
+            for group,rate in zip(optimizer.param_groups,[args.encoder_lr,args.head_lr]):group['lr']=rate
+            start_epoch=state['epoch'];step=state['step'];best=state['best'];stale=0;history=state['history']
+            torch.set_rng_state(state['torch_rng'].cpu());generator.set_state(state['order_rng'].cpu());random.setstate(state['python_rng'])
+            if device.type=='cuda':torch.cuda.set_rng_state_all([r.cpu() for r in state['cuda_rng']])
+            atomic_json(out/'continuation.json',{'parent_sha256':identity['continuation_source_sha256'],'completed_epochs':start_epoch,
+                       'parent_step':step,'new_total_epochs':args.epochs,'old_rates':old_rates,'new_rates':[args.encoder_lr,args.head_lr],
+                       'preserved':'encoder/head, Adam moments, Torch/CUDA/Python/order RNG; original run unchanged'})
+            save_checkpoint(out/'best.pt',{'critic':critic.state_dict(),'epoch':start_epoch,'step':step,'validation':history[-1]['validation'],'identity':identity})
+        atomic_json(out/'run.json',identity)
     def save(epoch,position,indices):
         state={'critic':critic.state_dict(),'optimizer':optimizer.state_dict(),'epoch':epoch,'cursor':position,'order':indices,
                'best':best,'stale':stale,'step':step,'history':history,'torch_rng':torch.get_rng_state(),
                'cuda_rng':torch.cuda.get_rng_state_all() if device.type=='cuda' else [],'order_rng':generator.get_state(),'python_rng':random.getstate()}
         save_checkpoint(out/'latest.pt',state)
     start=time.perf_counter();last_save=start;run_updates=0
-    if not (out/'latest.pt').exists():save(0,0,None)
+    if not (out/'latest.pt').exists():save(start_epoch,0,None)
     if device.type=='cuda':torch.cuda.reset_peak_memory_stats()
     for epoch in range(start_epoch,args.epochs):
         if order is None:order=torch.randperm(len(rows['fit']),generator=generator).tolist();cursor=0
@@ -134,6 +158,7 @@ def parser():
     p.add_argument('--batch-size',type=int,default=8);p.add_argument('--accumulate',type=int,default=4)
     p.add_argument('--device',default='cuda');p.add_argument('--precision',default='bf16',choices=['bf16','fp32'])
     p.add_argument('--cpu-threads',type=int,default=2);p.add_argument('--seed',type=int,default=3751);p.add_argument('--resume',action='store_true')
+    p.add_argument('--continue-from',help='Immutable latest checkpoint at an improved completed epoch boundary; starts a separate lower-rate run')
     return p
 
 if __name__=='__main__':

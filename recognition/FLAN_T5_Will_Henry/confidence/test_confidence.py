@@ -38,6 +38,23 @@ class ConfidenceTests(unittest.TestCase):
             args.resume=True
             with patch.object(a,'load_assembly',return_value=(rows,assembly)),patch.object(a.AutoTokenizer,'from_pretrained',return_value=Tokenizer()):a.main(args)
             self.assertEqual(torch.load(root/'adapt/latest.pt',weights_only=False)['step'],2)
+            original_sha=sha(root/'adapt/latest.pt')
+            paused=Namespace(**vars(args));paused.resume=False;paused.output=str(root/'paused');paused.continue_from=None
+            (root/'paused').mkdir();(root/'paused/STOP').write_text('fixture pause')
+            with patch.object(a,'load_assembly',return_value=(rows,assembly)),patch.object(a.AutoTokenizer,'from_pretrained',return_value=Tokenizer()):a.main(paused)
+            state=torch.load(root/'paused/latest.pt',weights_only=False)
+            self.assertEqual((state['epoch'],state['cursor'],state['step']),(0,4,1))
+            (root/'paused/STOP').unlink();paused.resume=True
+            with patch.object(a,'load_assembly',return_value=(rows,assembly)),patch.object(a.AutoTokenizer,'from_pretrained',return_value=Tokenizer()):a.main(paused)
+            recovered=torch.load(root/'paused/latest.pt',weights_only=False)
+            for key,value in latest['critic'].items():torch.testing.assert_close(value,recovered['critic'][key],atol=0,rtol=0)
+            args.resume=False;args.continue_from=str(root/'adapt/latest.pt');args.output=str(root/'late')
+            args.epochs=2;args.encoder_lr=3e-6;args.head_lr=3e-5
+            with patch.object(a,'load_assembly',return_value=(rows,assembly)),patch.object(a.AutoTokenizer,'from_pretrained',return_value=Tokenizer()):a.main(args)
+            continued=torch.load(root/'late/latest.pt',weights_only=False)
+            self.assertEqual((continued['epoch'],continued['step']),(2,4))
+            self.assertEqual([g['lr'] for g in continued['optimizer']['param_groups']],[3e-6,3e-5])
+            self.assertEqual(sha(root/'adapt/latest.pt'),original_sha)
 
     def test_same_vectors_train_all_heads_with_fit_only_scaling(self):
         from train_confidence import train_mlp,train_trees,temperature

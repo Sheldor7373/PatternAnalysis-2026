@@ -31,6 +31,15 @@ for the joint optimisation; this is an explicit new stage. Frozen heads and
 generator checkpoints remain controls. Ordinary boosted trees cannot backpropagate
 into the encoder; refitting trees on adapted vectors is a separate possible study.
 
+A lower-rate extension is a separate run, not an edit of the three-epoch control.
+It may use `--continue-from IMMUTABLE_PARENT/latest.pt --epochs 6
+--encoder-lr 3e-6 --head-lr 3e-5` only after the TRAIN validation curve supports it.
+The parent `run.json` travels with the checkpoint. The code checks its data/head/
+encoder lineage, a completed epoch boundary, an improved terminal model, lower
+rates and a larger finite epoch target. Adam/RNG are restored and original files
+are preserved. Early stopping remains active. `--epochs` is the total target,
+not an additional six epochs. The next extension decision never uses TEST.
+
 ## Data and evaluation boundaries
 
 Assembly feature, label, metadata and mask JSONL files align by row position. The
@@ -51,6 +60,20 @@ Unweighted log loss selects checkpoints. A scalar temperature is fitted only on
 the reserved calibration partition; its own calibration score is an in-sample
 diagnostic. Official TEST is never opened by these fitting scripts or used to
 choose settings. TEST results and group-level uncertainty remain a later step.
+
+`evaluate_confidence.py` requires all fitting/calibration results and an explicit
+frozen selection receipt marking the extension decision complete. It verifies
+model/temperature/TEST hashes before inference and stores raw scores in atomic
+resumable chunks. Frozen MLP logits retain FP32 head arithmetic, matching its
+calibration, while encoder and adapted-head autocast match their respective
+training recipes. Predeclared length-dependent batching limits attention memory;
+it does not change the evidence caps. All held pairs remain recorded and excluded
+from scored denominators. Report unique-pair metrics, equally weighted official
+report contributions, and source-component bootstrap intervals. Duplicate mapped
+official reports do not become independent observations. Category slices can
+overlap after identical-pair collapse. Risk/coverage thresholds are declared before
+TEST; they must not be selected from TEST performance. This is a synthetic stress
+test, not a probability calibration for naturally occurring generator errors.
 
 ## Running locally
 
