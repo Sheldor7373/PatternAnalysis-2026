@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "study": "One explicit extra full-model epoch; reused development comparison",
+  "configuration": {
+    "additional_examples": 97411,
+    "start_exposures": 292233,
+    "final_exposures": 389644,
+    "start_global_step": 93449,
+    "final_global_step": 117802,
+    "training_batch": 4,
+    "accumulate": 1,
+    "training_precision": "bf16",
+    "new_peak_lr": 3e-05,
+    "schedule": "one-epoch linear example decay, no warmup; Adam/RNG/cursor retained",
+    "evaluation_batch": 32,
+    "evaluation_precision": "fp32",
+    "source_cap": 384,
+    "output_cap": 256,
+    "decoder": "greedy",
+    "seed": 3710
+  },
+  "checkpoints": {
+    "training_parent_completion_sha256": "7b6e6f2b8f2b0b27a1bce9bcdf6bad1d1dd94dd0e35a281f0f1208f5ad018c7c",
+    "final_completion_sha256": "9a5934dc7ef2d6eabf05318f93b9d57e4ec73a0954a558238637724fb17938dc"
+  },
+  "training": {
+    "optimizer_steps": 117802,
+    "best_dev_loss": 0.5699388785280508,
+    "session_seconds": 9863.969420700101,
+    "session_target_tokens": 6273565,
+    "target_tokens_per_second": 636.0081557871182,
+    "peak_allocated_mib": 2681.74072265625,
+    "peak_reserved_mib": 2990.0
+  },
+  "comparison": {
+    "analysed_utc": "2026-10-30T03:29:09.396261+00:00",
+    "n": 64,
+    "report_image_groups": 64,
+    "bootstrap": "1000 paired sampled-group draws, seed3746; exploratory on previously-used development, no fresh test claim",
+    "paired_epoch4_minus_epoch3": {
+      "rouge1": {
+        "mean_paired_difference": 0.005740755827240885,
+        "lo": -0.0020930792205139177,
+        "hi": 0.014679569347605842
+      },
+      "rouge2": {
+        "mean_paired_difference": 0.008047153747841311,
+        "lo": -0.00277280826285729,
+        "hi": 0.023106425543951717
+      },
+      "rougeL": {
+        "mean_paired_difference": 0.0021511061976191154,
+        "lo": -0.007488588421758398,
+        "hi": 0.01309444569523037
+      },
+      "rougeLsum": {
+        "mean_paired_difference": 0.006663641672053265,
+        "lo": -0.001154974831050579,
+        "hi": 0.017082688122806694
+      },
+      "reference_nll_per_token": {
+        "mean_paired_difference": -0.00607003544284631,
+        "lo": -0.008708319558723686,
+        "hi": -0.0032025055809501908
+      }
+    },
+    "baseline_generation_weights_match_training_parent": true,
+    "paired_token_weighted_reference_nll": {
+      "difference": -0.007584102791869294,
+      "lo": -0.010361889715658892,
+      "hi": -0.004655405597671482
+    },
+    "models": {
+      "epoch3": {
+        "rouge": {
+          "rouge1": 0.7298023062029958,
+          "rouge2": 0.5288019212008498,
+          "rougeL": 0.6661196637726785,
+          "rougeLsum": 0.6892914009906416
+        },
+        "reference_token_weighted_nll": 0.5591288713498729,
+        "generation_seconds": 9.952932800166309,
+        "outputs_without_eos": 1,
+        "truncated_inputs": 1,
+        "peak_allocated_mib": 823.1025390625
+      },
+      "epoch4": {
+        "rouge": {
+          "rouge1": 0.7355430620302367,
+          "rouge2": 0.536849074948691,
+          "rougeL": 0.6682707699702977,
+          "rougeLsum": 0.6959550426626948
+        },
+        "reference_token_weighted_nll": 0.5515447685580036,
+        "generation_seconds": 8.665038300212473,
+        "outputs_without_eos": 0,
+        "truncated_inputs": 1,
+        "peak_allocated_mib": 809.20703125
+      }
+    },
+    "limitations": [
+      "Reference likelihood is teacher-forced and not correctness confidence",
+      "Single ordered runtime measurements have different thermal/session conditions",
+      "No official validation tuning or baseline replacement"
+    ]
+  },
+  "output_diagnostics": {
+    "epoch3": {
+      "empty": 0,
+      "no_eos": 1,
+      "input_truncated": 1,
+      "repetition_candidates": 0,
+      "mean_generated_tokens": 58.546875,
+      "median_generated_tokens": 54.5,
+      "p95_generated_tokens": 112.69999999999999,
+      "max_generated_tokens": 256
+    },
+    "epoch4": {
+      "empty": 0,
+      "no_eos": 0,
+      "input_truncated": 1,
+      "repetition_candidates": 0,
+      "mean_generated_tokens": 58.125,
+      "median_generated_tokens": 54.0,
+      "p95_generated_tokens": 117.54999999999998,
+      "max_generated_tokens": 239
+    },
+    "exactly_unchanged_outputs": 35,
+    "rougeL_improved": 14,
+    "rougeL_declined": 13,
+    "rougeL_tied": 37
+  },
+  "frozen_training_files_sha256": {
+    "checkpoint_storage.py": "42cdd892689c09d68614e8e99a1abb5f870c627103b1d1c3911214e7cceedc0d",
+    "dataset.py": "e09b9f0f6b703d486e60216ba5d6be0c376338bcbff8e966754010e05cef2aa4",
+    "modules.py": "cd3d16974c2ed35ae0ee5b444ed500bfb9661f1dc532fe048546a591d931ee81",
+    "runtime.py": "ee3aa812f66a57f1af86bf7e7058719ff6052f27bb25b852323771d2d6a452b9",
+    "status_io.py": "0a0711d2a7908abd10050df545eac8b09a3ae3cd06d15aad88bc9b155c1ba857",
+    "train.py": "bd37722c7e6d551bd75b231ef10e71f5f6729310180d9f39b2e22d43d71d0d27",
+    "training_control.py": "8bfb34f5033911f19f3986374754b13bd2b525050531d9135cadd88ea1e83e47",
+    "training_transition.py": "5a5f124f1f4f46d47faed4842308518b0c230113f3a81a4f26cb9b56e5cdd16b"
+  }
+}
