@@ -22,7 +22,9 @@ def read_json(path):
     except (OSError,json.JSONDecodeError):
         return None
 
-def check_training_gate(directory,expected_steps,receipt_path):
+def check_training_gate(directory,expected_steps,receipt_path,expected_exposures=292233,expected_epochs=3):
+    if any(not isinstance(value,int) or isinstance(value,bool) or value<1 for value in (expected_steps,expected_exposures,expected_epochs)):
+        raise ValueError('Training gate requires explicit positive finite-target counts')
     root=Path(directory)
     supervisor=read_json(root/'supervisor.json') or {}
     status=read_json(root/'training/status.json') or {}
@@ -33,7 +35,7 @@ def check_training_gate(directory,expected_steps,receipt_path):
             and metrics.get('optimizer_steps')==expected_steps
             and receipt.get('optimizer_steps')==expected_steps
             and receipt.get('verified_complete') is True
-            and receipt.get('exposures')==292233 and receipt.get('epochs')==3):
+            and receipt.get('exposures')==expected_exposures and receipt.get('epochs')==expected_epochs):
         raise ValueError('Training has not verifiably finished its finite target; no inference launched')
     completion=Path(receipt['latest_checkpoint'])/'COMPLETE.json'
     if hashlib.sha256(completion.read_bytes()).hexdigest()!=receipt.get('latest_completion_sha256'):
@@ -51,7 +53,8 @@ def gpu_sample():
 
 def run(config_path,resume=False):
     config=json.loads(Path(config_path).read_text(encoding='utf-8'))
-    gate=check_training_gate(config['training_run'],config['required_training_steps'],config['training_completion_receipt'])
+    gate=check_training_gate(config['training_run'],config['required_training_steps'],config['training_completion_receipt'],
+                             config.get('required_training_exposures',292233),config.get('required_training_epochs',3))
     work=Path(config['work_root']).resolve();job=Path(config['supervisor_output']).resolve()
     output=Path(config['prediction_output']).resolve();code=Path(config['code_directory']).resolve()
     assert job.is_relative_to(work) and output.is_relative_to(work)
