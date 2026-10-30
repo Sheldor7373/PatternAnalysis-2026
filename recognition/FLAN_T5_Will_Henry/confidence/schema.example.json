@@ -1,0 +1,10 @@
+{
+  "dataset_role": "TRAIN",
+  "feature_fields": ["source", "candidate"],
+  "label_field": "material_error",
+  "label_provenance": "synthetic_weak_unverified",
+  "split_group": "report_image_connected_component",
+  "split_rule": "confidence-split-v1: sha256(group key), 80/10/10 fit/validation/calibration",
+  "model_feature_exclusions": ["id", "label", "category", "rationale", "flags", "generator_provenance"],
+  "external_data": "configured separately; do not include TEST records"
+}
