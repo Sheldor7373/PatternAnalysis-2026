@@ -22,7 +22,8 @@ from runtime import append_jsonl, environment, memory_stats, precision_context, 
 from checkpoint_storage import publish_checkpoint, resolve_checkpoint
 from status_io import atomic_json
 from training_control import selection_point, update_selection, validate_best_reference
-from training_transition import RemainingBatches, checkpoint_cursor, transition_policy, lr_factor, validate_arguments
+from training_transition import (RemainingBatches, checkpoint_cursor, transition_policy, lr_factor,
+                                 validate_arguments, epoch_extension_policy, restore_optimizer_schedule)
 
 
 def atomic_status(output, value):
@@ -63,6 +64,9 @@ def main(args):
     train_rows = select_rows(read_jsonl(train_path), args.train_limit, args.seed)
     dev_rows = select_rows(read_jsonl(dev_path), args.dev_limit, args.seed)
     restoring = args.resume or args.transition_from is not None
+    restarting_schedule = args.restart_schedule and not args.resume
+    if args.restart_schedule and (args.transition_from is None or args.mode != 'full'):
+        raise ValueError('Explicit schedule restart requires a full-model transition checkpoint')
     if args.resume and args.transition_from is not None:
         # The recorded parent path is a provenance argument on later resumes;
         # the checkpoint loaded here is always this segment's own latest.
@@ -78,7 +82,7 @@ def main(args):
     if restoring:
         model, tokenizer, saved_settings = load_checkpoint(source_checkpoint, device)
         original = saved_settings["arguments"]
-        validate_arguments(vars(args), original, transition=not args.resume)
+        validate_arguments(vars(args), original, transition=not args.resume, schedule_restart=restarting_schedule)
         state = torch.load(source_checkpoint / "trainer.pt", map_location="cpu", weights_only=False)
         if saved_settings.get("checkpoint_step") != state["step"]:
             raise ValueError("Checkpoint save was interrupted: model and optimizer steps differ")
@@ -107,7 +111,7 @@ def main(args):
     policy = state.get("scheduler_policy") if restoring else None
     transition = saved_settings.get("transition") if restoring else None
     if restoring and not args.resume:
-        policy = transition_policy(state, original, vars(args), len(training))
+        policy = (epoch_extension_policy if restarting_schedule else transition_policy)(state, original, vars(args), len(training))
         transition = {"source_checkpoint": str(source_checkpoint.resolve()),
                       "source_completion_sha256": sha256(source_checkpoint / "COMPLETE.json"),
                       "source_trainer_sha256": sha256(source_checkpoint / "trainer.pt"),
@@ -117,6 +121,10 @@ def main(args):
                                  "consumed_examples": policy["anchor_examples"]},
                       "previous_monitor": state.get("monitor", {}),
                       "selection_note": "Checkpoint continuation; same fixed dev rows and epoch-end selection policy"}
+        if restarting_schedule:
+            transition['schedule_restart'] = {'source_scheduler':state['scheduler'], 'new_policy':policy,
+                'preserved':'model, Adam moments/step, Python/Torch/CUDA RNG, data cursor and original best reference',
+                'changed':'one additional epoch; LR restarted then linearly decayed, no warmup; not bit-identical original schedule continuation'}
     if policy:
         total_steps = policy["planned_steps"]
         # LambdaLR.load_state_dict restores counters, not the lambda function.
@@ -140,8 +148,7 @@ def main(args):
     best_step = None
     monitor = {}
     if restoring:
-        optimizer.load_state_dict(state["optimizer"])
-        scheduler.load_state_dict(state["scheduler"])
+        restore_optimizer_schedule(optimizer, scheduler, state, policy, restart=restarting_schedule)
         if policy and (optimizer.param_groups[0]["lr"] != scheduler.get_last_lr()[0]
                        or not math.isclose(optimizer.param_groups[0]["lr"],
                                           policy["base_lrs"][0] * lr_factor(policy, state["step"]),
@@ -381,6 +388,7 @@ def parser():
     p.add_argument("--gradient-checkpointing", action="store_true")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--transition-from", help="Immutable local checkpoint to continue into a fresh output segment")
+    p.add_argument('--restart-schedule', action='store_true', help='Explicit one-epoch full-model extension from a completed source; preserve Adam/RNG but restart LR')
     return p
 
 

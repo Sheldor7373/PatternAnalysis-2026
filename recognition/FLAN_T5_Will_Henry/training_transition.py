@@ -123,11 +123,55 @@ def lr_factor(policy, actual_step, group=0):
     return lr / base
 
 
-def validate_arguments(arguments, original, transition=False):
+def epoch_extension_policy(state, original, new, size):
+    """Explicit one-epoch LR restart from a completed checkpoint, retaining Adam."""
+    epoch, offset = checkpoint_cursor(state, original, size)
+    if epoch != original['epochs'] or offset or state.get('consumed_examples') != epoch * size:
+        raise ValueError('Epoch extension requires an exactly completed original exposure budget')
+    if new['epochs'] != original['epochs'] + 1 or not math.isfinite(new['lr']) or new['lr'] <= 0:
+        raise ValueError('Restart requires exactly one additional epoch and a finite positive LR')
+    if new['batch_size'] != original['batch_size'] or new['accumulate'] != original['accumulate']:
+        raise ValueError('Epoch extension must preserve batch and accumulation')
+    if original.get('max_steps') is not None or new.get('max_steps') is not None:
+        raise ValueError('Epoch extension requires an exposure-defined budget')
+    old_lrs = [g['lr'] for g in state['optimizer']['param_groups']]
+    if state['scheduler']['last_epoch'] != state['step'] or state['scheduler']['_last_lr'] != old_lrs:
+        raise ValueError('Source scheduler/optimizer counters or rates disagree')
+    if any(lr != 0 for lr in old_lrs):
+        raise ValueError('Source schedule must be completed at zero LR')
+    rates = [new['lr']] * len(old_lrs)
+    return {'version':1,'kind':'restarted_epoch_examples','anchor_step':state['step'],
+            'anchor_epoch':epoch,'anchor_offset':0,'anchor_examples':epoch*size,
+            'anchor_lrs':rates,'base_lrs':rates,'source_next_lrs':old_lrs,
+            'size':size,'epochs':new['epochs'],'batch_size':new['batch_size'],'accumulate':new['accumulate'],
+            'warmup_examples':epoch*size,'final_examples':size*new['epochs'],
+            'planned_steps':state['step']+remaining_updates(size,new['epochs'],epoch,0,new['batch_size'],new['accumulate']),
+            'restart_note':'New peak LR at first additional update; linear decay by examples to zero, no new warmup; Adam moments and global update counter preserved'}
+
+
+def restore_optimizer_schedule(optimizer, scheduler, state, policy, restart=False):
+    optimizer.load_state_dict(state['optimizer'])
+    if restart:
+        if policy['kind'] != 'restarted_epoch_examples':
+            raise ValueError('Unrecognised explicit restart policy')
+        scheduler.base_lrs = list(policy['base_lrs'])
+        scheduler.last_epoch = state['step']
+        scheduler._step_count = state['step'] + 1
+        scheduler._last_lr = list(policy['anchor_lrs'])
+        for group, base, rate in zip(optimizer.param_groups, scheduler.base_lrs, scheduler._last_lr):
+            group['initial_lr'], group['lr'] = base, rate
+    else:
+        scheduler.load_state_dict(state['scheduler'])
+
+
+def validate_arguments(arguments, original, transition=False, schedule_restart=False):
     excluded = {"resume", "device", "max_minutes", "cpu_threads"}
     if transition:
         excluded |= {"output", "batch_size", "accumulate", "transition_from"}
-    defaults = {"checkpoint_minutes": 0.0, "eval_minutes": 0.0, "eval_at_start": False, "transition_from": None}
+    if schedule_restart:
+        if not transition:raise ValueError('A new schedule requires a fresh transition, not resume')
+        excluded |= {'epochs','lr','restart_schedule'}
+    defaults = {"checkpoint_minutes": 0.0, "eval_minutes": 0.0, "eval_at_start": False, "transition_from": None,'restart_schedule':False}
     changed = [key for key, value in arguments.items()
                if key not in excluded and original.get(key, defaults.get(key)) != value]
     if changed:
