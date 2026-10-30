@@ -51,6 +51,8 @@ def main(args):
         raise ValueError("batch_size, accumulate and epochs must be positive")
     if args.max_steps is not None and args.max_steps < 1:
         raise ValueError("max_steps must be positive")
+    if args.stop_at_step is not None and args.stop_at_step < 1:
+        raise ValueError('stop_at_step must be positive')
     if args.log_every < 1 or args.checkpoint_minutes < 0 or args.eval_minutes < 0:
         raise ValueError("log_every must be positive; monitoring intervals must be nonnegative")
     set_seed(args.seed)
@@ -179,6 +181,8 @@ def main(args):
         if device.type == "cuda" and state["cuda_rng"] is not None:
             torch.cuda.set_rng_state_all(state["cuda_rng"])
     write_json(output / "run.json", settings)
+    if args.stop_at_step is not None and not step < args.stop_at_step <= total_steps:
+        raise ValueError('Pause boundary must be ahead of the restored step and within the full schedule')
     reset_memory(device)
     started = time.perf_counter()
     trained_tokens = 0
@@ -306,8 +310,9 @@ def main(args):
                     window_started = elapsed_total()
                 time_up = args.max_minutes is not None and time.perf_counter() - started >= args.max_minutes * 60
                 requested = (output / "STOP").exists()
-                if step >= total_steps or time_up or requested:
-                    stopped = "stop_requested" if requested else ("time_budget" if time_up else "step_budget")
+                boundary_pause = args.stop_at_step is not None and step >= args.stop_at_step and step < total_steps
+                if step >= total_steps or time_up or requested or boundary_pause:
+                    stopped = "stop_requested" if requested else ("time_budget" if time_up else ('step_pause' if boundary_pause else "step_budget"))
                     break
                 if batch_index + 1 < len(loader):
                     if args.checkpoint_minutes and elapsed_total() - last_checkpoint_elapsed >= args.checkpoint_minutes * 60:
@@ -350,7 +355,7 @@ def main(args):
               "session_target_tokens": trained_tokens, "target_tokens_per_second": trained_tokens / max(elapsed, 1e-9),
               **memory_stats(device), **settings}
     write_json(output / "training_metrics.json", result)
-    atomic_status(output, {"state": "stopped" if stopped in ("time_budget", "stop_requested") else "completed",
+    atomic_status(output, {"state": "stopped" if stopped in ("time_budget", "stop_requested", "step_pause") else "completed",
                            "pid": os.getpid(), "step": step, "stop_reason": stopped,
                            "elapsed_seconds": elapsed_total(), "checkpoint_elapsed_seconds": last_checkpoint_elapsed})
     print(json.dumps({k: result[k] for k in ("optimizer_steps", "best_dev_loss", "session_seconds", "peak_allocated_mib")}))
@@ -374,6 +379,7 @@ def parser():
     p.add_argument("--dev-limit", type=int, default=256)
     p.add_argument("--train-limit", type=int)
     p.add_argument("--max-steps", type=int)
+    p.add_argument('--stop-at-step',type=int,help='Pause at a global optimizer boundary without truncating the complete LR schedule')
     p.add_argument("--max-minutes", type=float)
     p.add_argument("--patience", type=int, default=2)
     p.add_argument("--min-delta", type=float, default=0.001)

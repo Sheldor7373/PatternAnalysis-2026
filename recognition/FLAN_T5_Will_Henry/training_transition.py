@@ -165,7 +165,7 @@ def restore_optimizer_schedule(optimizer, scheduler, state, policy, restart=Fals
 
 
 def validate_arguments(arguments, original, transition=False, schedule_restart=False):
-    excluded = {"resume", "device", "max_minutes", "cpu_threads"}
+    excluded = {"resume", "device", "max_minutes", "cpu_threads", "stop_at_step"}
     if transition:
         excluded |= {"output", "batch_size", "accumulate", "transition_from"}
     if schedule_restart:
