@@ -1,0 +1,33 @@
+{
+  "rows": 68408,
+  "quantiles": {
+    "source": {
+      "min": 1.0,
+      "p50": 41.0,
+      "p90": 83.0,
+      "p95": 97.0,
+      "p99": 126.0,
+      "max": 216.0
+    },
+    "candidate": {
+      "min": 1.0,
+      "p50": 38.0,
+      "p90": 73.0,
+      "p95": 86.0,
+      "p99": 112.0,
+      "max": 243.0
+    },
+    "combined": {
+      "min": 16.0,
+      "p50": 92.0,
+      "p90": 164.0,
+      "p95": 189.0,
+      "p99": 240.0,
+      "max": 470.0
+    }
+  },
+  "source_truncated": 0,
+  "candidate_truncated": 0,
+  "tokenization_seconds": 66.32740819989704,
+  "action": "Truncation is recorded; these pairs remain explicitly limited evidence, never silently treated as complete."
+}

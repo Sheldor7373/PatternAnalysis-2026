@@ -1,0 +1,58 @@
+{
+  "measurements": [
+    {
+      "batch_size": 8,
+      "rows": 128,
+      "seconds": 1.7826447999104857,
+      "rows_per_second": 71.80342377035932,
+      "peak_allocated_mib": 314.93603515625,
+      "peak_reserved_mib": 468.0
+    },
+    {
+      "batch_size": 16,
+      "rows": 128,
+      "seconds": 0.9730070000514388,
+      "rows_per_second": 131.55095491937178,
+      "peak_allocated_mib": 487.78515625,
+      "peak_reserved_mib": 714.0
+    },
+    {
+      "batch_size": 32,
+      "rows": 128,
+      "seconds": 0.9945203999523073,
+      "rows_per_second": 128.70525331218775,
+      "peak_allocated_mib": 833.40380859375,
+      "peak_reserved_mib": 1200.0
+    }
+  ],
+  "selected": {
+    "batch_size": 16,
+    "rows": 128,
+    "seconds": 0.9730070000514388,
+    "rows_per_second": 131.55095491937178,
+    "peak_allocated_mib": 487.78515625,
+    "peak_reserved_mib": 714.0
+  },
+  "estimated_vector_seconds": 520.0114285899908,
+  "stage_b": "JointCritic path prepared; no end-to-end fitting started",
+  "stage_b_resource_only": [
+    {
+      "batch_size": 2,
+      "forward_backward_seconds": 0.3572998000308871,
+      "peak_allocated_mib": 647.98583984375,
+      "peak_reserved_mib": 1312.0
+    },
+    {
+      "batch_size": 4,
+      "forward_backward_seconds": 0.1380600999109447,
+      "peak_allocated_mib": 1119.35009765625,
+      "peak_reserved_mib": 1312.0
+    },
+    {
+      "batch_size": 8,
+      "forward_backward_seconds": 0.20643860008567572,
+      "peak_allocated_mib": 2027.1474609375,
+      "peak_reserved_mib": 2228.0
+    }
+  ]
+}
