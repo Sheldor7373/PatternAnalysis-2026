@@ -19,7 +19,9 @@ def row_losses(logits, labels):
     """Sum reference-token NLL per row, ignoring padding labels (-100)."""
     if logits.shape[:2] != labels.shape or not torch.isfinite(logits).all():
         raise ValueError('Invalid/nonfinite reference logits')
-    losses=F.cross_entropy(logits.float().transpose(1,2),labels,reduction='none',ignore_index=-100)
+    # Match the Transformers T5 flattened-vocabulary loss path. The spatial
+    # cross-entropy kernel used by transpose(1,2) can accumulate differently on CUDA.
+    losses=F.cross_entropy(logits.float().reshape(-1,logits.shape[-1]),labels.reshape(-1),reduction='none',ignore_index=-100).reshape_as(labels)
     counts=labels.ne(-100).sum(1)
     if bool((counts==0).any()):
         raise ValueError('Empty reference labels')
@@ -70,7 +72,9 @@ def run(args):
                 batch={k:v.to(device) for k,v in batch.items()}
                 result=model(**batch)
                 sums,counts=row_losses(result.logits,batch['labels'])
-                assert torch.allclose(sums.sum()/counts.sum(),result.loss.float(),atol=2e-5,rtol=2e-5)
+                recomputed=sums.sum()/counts.sum()
+                if not torch.allclose(recomputed,result.loss.float(),atol=2e-5,rtol=2e-5):
+                    raise RuntimeError(f'Reference loss mismatch: per-row={float(recomputed)}, model={float(result.loss)}')
                 for row,total,count in zip(rows[offset:offset+8],sums.tolist(),counts.tolist()):
                     nll=total/count
                     records.append({'id':row['id'],'reference_tokens':count,'reference_nll_sum':total,
